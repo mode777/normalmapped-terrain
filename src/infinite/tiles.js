@@ -1,15 +1,14 @@
 /**
  * Toroidal clipmap tile streamer.
  *
- * One DataArrayTexture layer per LOD. Each layer is a 3x3 grid of 64x64
+ * One DataArrayTexture layer per LOD. Each layer is a 4x4 grid of 64x64
  * height tiles / 512x512 normal tiles. A tile at world tile coordinate
- * (tx,ty) always lives in slot (tx mod 3, ty mod 3); the shader uses the
+ * (tx,ty) always lives in slot (tx mod 4, ty mod 4); the shader uses the
  * same mapping, so no texture data ever has to be shifted when the camera
  * moves.
  *
- * Tiles are generated in workers and uploaded with texSubImage3D. A 3x3
- * window around the camera exactly covers the visible ring; with two workers
- * it can generate the incoming row/column before the ring reaches it.
+ * Tiles are generated in workers and uploaded with texSubImage3D. The visible
+ * ring only needs 3x3; the 4th row/column is prefetch margin for fast flight.
  */
 
 import * as THREE from 'three';
@@ -150,7 +149,7 @@ export class TileStreamer {
       l.desired.fill(null);
 
       // Square window of cacheTiles around the camera tile. For the default
-      // 3x3 this is camTile-1 ... camTile+1.
+      // 4x4 this is camTile-2 ... camTile+1; the visible ring needs 3x3.
       const half = Math.floor(this.cacheTiles / 2);
       for (let dy = -half; dy < -half + this.cacheTiles; dy++) {
         for (let dx = -half; dx < -half + this.cacheTiles; dx++) {
@@ -378,12 +377,23 @@ export class TileStreamer {
     return true;
   }
 
-  _progress() {
+  /** The 3x3 tiles actually covered by the visible ring (priority <= 1). */
+  _allVisibleLoaded() {
+    for (const l of this.levels) {
+      for (const d of l.desired) {
+        if (d === null || d.priority > 1) continue;
+        if (l.slots[this._slot(d.tx, d.ty)] !== d.key) return false;
+      }
+    }
+    return true;
+  }
+
+  _progress(visibleOnly = false) {
     let done = 0;
     let total = 0;
     for (const l of this.levels) {
       for (const d of l.desired) {
-        if (d === null) continue;
+        if (d === null || (visibleOnly && d.priority > 1)) continue;
         total++;
         if (l.slots[this._slot(d.tx, d.ty)] === d.key) done++;
       }
@@ -393,14 +403,14 @@ export class TileStreamer {
 
   _notifyProgress() {
     if (!this.onProgress) return;
-    const p = this._progress();
+    const p = this._progress(true);
     this.onProgress(p.total > 0 ? p.done / p.total : 1, p);
   }
 
   _checkPrime() {
     if (!this._prime) return;
     this._notifyProgress();
-    if (this._allDesiredLoaded()) {
+    if (this._allVisibleLoaded()) {
       const resolve = this._prime;
       this._prime = null;
       resolve();
@@ -416,10 +426,10 @@ export class TileStreamer {
     }
   }
 
-  /** Generate/upload the first 3x3 cache window and resolve when complete. */
+  /** Resolve when the visible 3x3 tiles are resident; prefetch continues. */
   prime(absX, absZ) {
     this.update(absX, absZ, { force: true });
-    if (this._allDesiredLoaded()) return Promise.resolve();
+    if (this._allVisibleLoaded()) return Promise.resolve();
     return new Promise((resolve) => {
       this._prime = resolve;
       this._checkPrime();

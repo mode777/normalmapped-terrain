@@ -31,12 +31,12 @@ import { initUI } from './ui.js';
 
 const CONFIG = {
   seed: DEFAULT_SEED,
-  baseSpacing: 8,       // metres between near-field vertices; halves the texel size
+  baseSpacing: 2,       // metres between near-field vertices; 0.25m normal texels
   centerCells: 24,      // centre block half-size and ring width, in cells
-  levels: 8,            // rings at LOD 0..7; 8m * 2^7 keeps the ~49km view
+  levels: 10,           // rings at LOD 0..9; 2m * 2^9 keeps the ~49km view
   tileSize: 64,         // height samples per tile side
   normalScale: 8,       // normal-map texels per height sample (8x mesh)
-  cacheTiles: 3,        // 3x3 tiles per LOD layer (exactly the visible ring)
+  cacheTiles: 4,        // 4x4 tiles per LOD layer; 4*64*8 = 2048 (ceiling)
   heightScale: DEFAULT_HEIGHT_SCALE,
   skirtDepth: 420,      // metres of horizon skirt
 };
