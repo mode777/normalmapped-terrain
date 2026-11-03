@@ -4,13 +4,16 @@ Guidance for AI coding agents (and humans in a hurry) working in this repo.
 
 ## What this repo is
 
-A proof-of-concept web app that renders terrain in Three.js with a **low-poly
-mesh whose lighting comes from a high-resolution normal map baked from a
-heightfield** — normals are sampled per-pixel in a custom fragment shader
-instead of using interpolated vertex normals. The site offers an A/B/C
-comparison (vertex normals / normal map / high-res reference mesh) plus a
-split-screen mode, two datasets (procedural fBM + real Grand Canyon SRTM),
-and deploys to GitHub Pages.
+Two proof-of-concept renderers in one repo:
+
+1. **`index.html`** — a finite terrain with a low-poly mesh whose lighting
+   comes from a high-resolution normal map baked from a heightfield. Offers
+   A/B/C (vertex normals / normal map / high-res reference), split-screen,
+   and two datasets (procedural fBM + real Grand Canyon SRTM).
+2. **`infinite.html`** — camera-centred clipmap rings over an effectively
+   infinite procedural world. Heights are displaced in the vertex shader;
+   normals come from a toroidal per-LOD tile cache in `DataArrayTexture`s;
+   the camera free-flies over the terrain.
 
 Ship anything visual only after verifying it renders — see
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
@@ -26,11 +29,14 @@ npm run deploy                  # build + force-push dist/ to gh-pages
 npm run terrain:grand-canyon    # re-download & bake SRTM data -> public/data/
 node tools/build-real-terrain.mjs --name matterhorn --lat 45.9763 --lon 7.6586
 
+npm run test:infinite           # Node-only tile/LOD/normal math checks
 npx vite preview                # serve dist/ locally on :4173
 
 # headless QA (needs chrome-headless-shell + puppeteer-core, see docs/VERIFICATION.md)
 node tools/screenshot.mjs --url http://127.0.0.1:4173/ --out shots
 node tools/analyze-shots.mjs shots
+node tools/screenshot-infinite.mjs --url http://127.0.0.1:4173/infinite.html --out shots-infinite
+node tools/analyze-infinite.mjs shots-infinite
 ```
 
 ## Repo map
@@ -44,11 +50,22 @@ node tools/analyze-shots.mjs shots
 | `src/shaders.js` | Custom vertex/fragment shaders — core of the PoC |
 | `src/main.js` | Scene, modes (A/split/B/C), split scissor rendering, sun, caches |
 | `src/ui.js` | DOM control wiring; `initUI(callbacks)` returns a setter API |
+| `src/infinite/heightfield.js` | Infinite seeded height function + per-tile float-Sobel normal baking |
+| `src/infinite/terrain-worker.js` | Worker wrapper around `generateTile` (transfers buffers) |
+| `src/infinite/tiles.js` | Toroidal per-LOD tile cache, worker queue, `texSubImage3D` uploads |
+| `src/infinite/clipmap.js` | Centre block, ring grids, 2:1 stitch strips, skirts |
+| `src/infinite/shaders.js` | Clipmap vertex/fragment shaders + LOD/tile debug views |
+| `src/infinite/flight.js` | Free-fly / auto-cruise camera in absolute world doubles |
+| `src/infinite/main.js` | Infinite scene, floating origin, texture arrays, UI, stats |
+| `infinite.html` | Second PoC entry page |
 | `tools/build-real-terrain.mjs` | Node script: Mapzen terrarium tiles → uint16 `.bin` + `.json` |
-| `tools/screenshot.mjs` | Headless-browser QA screenshot driver |
-| `tools/analyze-shots.mjs` | Pixel-statistics assertions on those screenshots |
+| `tools/test-infinite.mjs` | Node-only tile/LOD/normal math checks |
+| `tools/screenshot.mjs` | Headless-browser QA screenshot driver (first PoC) |
+| `tools/screenshot-infinite.mjs` | Headless QA driver for `infinite.html` |
+| `tools/analyze-infinite.mjs` | Pixel/console assertions for the infinite-terrain shots |
+| `tools/analyze-shots.mjs` | Pixel-statistics assertions on the first PoC's screenshots |
 | `public/data/` | Committed Grand Canyon heightfield (uint16 LE) + metadata JSON |
-| `docs/` | PIPELINE.md (the math), VERIFICATION.md (QA recipe) |
+| `docs/` | PIPELINE.md (the math), INFINITE_TERRAIN_CONCEPT.md, VERIFICATION.md |
 
 ## Dataset object shape (terrain-data.js)
 
@@ -100,6 +117,38 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
    never exceeds half the data resolution (a mesh finer than its data adds
    nothing but triangles).
 
+### Infinite-terrain invariants (`infinite.html`)
+
+9. **Tile cache is toroidal.** World tile `(tx,ty)` always lives in slot
+   `(tx mod 4, ty mod 4)`. The shader reproduces this with
+   `slot = mod(floor(t), uCacheTiles)`, the half-texel offset, and
+   `uRenderOrigin` passed **modulo `PHASE_WRAP`**. Do not pass absolute
+   world coordinates or shift texture data on camera movement.
+10. **Height and normal caches have different texel sizes but the same world
+    tile.** Height is 64² at `S_L`; normal is 128² at `S_L/2` (`normalScale
+    = 2`). The shader uses `uTileCells` for the height UV and
+    `uNormalTileCells = 128` for the normal UV. `T` in the UV formula is the
+    *per-map* tile texel count, not always 64.
+11. **Stitch chords must sample the coarse layer.** `aCoarse = 1` on the
+    stitch's coarse vertices adds 1 to `aLevel` for the height fetch only;
+    geometry spacing stays at the fine LOD. A stitch built from only fine
+    heights leaves visible hairline cracks because the coarse bilinear
+    sample differs. See `src/infinite/clipmap.js` + the vertex shader.
+12. **Upload height with `texSubImage3D`, not `copyTextureToTexture`.**
+    `copyTextureToTexture` produced `GL_INVALID_OPERATION` for R16F array
+    layers on SwiftShader. `_rawUpload` also explicitly sets
+    `UNPACK_FLIP_Y_WEBGL=false`; keep it.
+13. **Normal maps are always on.** The infinite page deliberately has **no
+    vertex-normal A/B**; the first PoC already proves that comparison.
+    `uNormalStrength` still scales decoded tangent components.
+14. **Floating origin rebases at ~15 km.** `renderOrigin` is a 2D world
+    origin; `uRenderOrigin` is `renderOrigin mod PHASE_WRAP` (largest cache
+    world size). The camera stays in small render-space coordinates. Do not
+    remove the modulo or long flights lose tile phase.
+15. **Clipmap constants:** `S0=8 m`, `C=24` cells, `LEVELS=8`, outer radius
+    ≈49 km, tile 64², cache 4×4. Ring `L` covers `[C·2^L, 2C·2^L]·S0`; the
+    last ring gets the only real skirt.
+
 ## Conventions & practices
 
 - ES modules everywhere, no TypeScript, no linter config yet — match the
@@ -108,8 +157,12 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
   (pngjs is Node-only, used by tools/). Keep it that way unless there's a
   strong reason.
 - Perf-relevant constants (fBM octaves, 2048² heightfield, LRU cache size of
-  10 geometries) were chosen to keep load < a few seconds and memory sane.
-  Profile before loosening them.
+  10 geometries, infinite-page `S0`/`LEVELS`/`normalScale`) were chosen to
+  keep load < a few seconds and memory sane. Profile before loosening them.
+- The infinite page's tile generation **must stay in the worker**; generating
+  64²/128² tiles on the main thread causes visible hitches at tile crossings.
+  The 4×4 cache already includes a prefetch row/column — don't shrink it to
+  3×3 without testing fast flight.
 - The Grand Canyon heightfield is **committed** (`public/data/`) so the site
   needs no network beyond GitHub Pages. Regenerating requires internet access
   to `s3.amazonaws.com/elevation-tiles-prod`.

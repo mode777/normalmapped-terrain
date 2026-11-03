@@ -9,6 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "terrain:grand-canyon": "node tools/build-real-terrain.mjs",
+    "test:infinite": "node tools/test-infinite.mjs",
     "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {

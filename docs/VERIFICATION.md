@@ -87,3 +87,57 @@ Open the site, then:
 5. **Grand Canyon dataset** — real SRTM; dramatic inner-gorge shadows at
    default sun position; credit line discloses the ×2.5 vertical
    exaggeration.
+
+## Infinite-terrain page (`infinite.html`)
+
+```bash
+npm run test:infinite               # Node tile/LOD/normal math, no browser
+npm run build && npx vite preview & # serve dist/ on :4173
+
+node tools/screenshot-infinite.mjs \
+  --url http://127.0.0.1:4173/infinite.html --out shots-infinite
+node tools/analyze-infinite.mjs shots-infinite
+```
+
+`screenshot-infinite.mjs` waits for the worker-generated tile cache, captures
+the default view plus a same-pose flat-normal view, auto-cruise movement, a
+25 km warp, a 500 km warp, the LOD/wire debug view, and a no-stitch view. It
+also writes `console.json`; any console/page error fails the run.
+
+`analyze-infinite.mjs` asserts:
+
+| Check | Meaning |
+|---|---|
+| no console/page errors | shaders and workers compiled/ran |
+| terrain `std > 8` on every shot | not blank / blown out |
+| black-pixel fraction `< 8%` | no large holes or unlit massifs |
+| normal-map `hf > 1.05 ×` flat-normal `hf` | the map is actually contributing detail |
+| LOD debug `std > 20` | the ring-colour view is varied |
+
+Reference values from the verified build: 128/128 tiles resident, 139k
+triangles, 4 draw calls, normal-map `hf=0.89` vs flat `hf=0.24`, zero upload
+errors, 128 resident tiles after both 25 km and 500 km warps.
+
+### Seam/crack test
+
+The stitch bug that produced thin background cracks is easy to reintroduce.
+To make it visible, hide the sky, set the renderer clear colour to magenta,
+and screenshot the terrain with the normal shading. The shipped build shows
+magenta only in the sky; any magenta hairline on the terrain is a real
+geometry gap. The QA driver's `07-no-stitch` shot intentionally hides the
+stitch mesh so a regression is obvious.
+
+Manual pass on a real GPU:
+
+1. **Auto-cruise** — the camera should advance smoothly at ~70 m/s while
+   following the terrain, with no tile-crossing pops.
+2. **WASD + mouse** — pointer lock takes control; `Q/E` changes altitude;
+   `Shift` boosts. Fly low over a ridge; the terrain guard must keep you out
+   of the ground.
+3. **Warp / long flight** — let auto-cruise run for a minute; the tile stats
+   should settle back to 128 resident, and the terrain should not swim.
+4. **Normal strength 0 → 2.5** — at 0 the near field goes smooth; at 1 it is
+   honest; above ~2 it gets crunchy.
+5. **Show LOD levels / Show tile grid** — ring colours should change at the
+   square LOD boundaries; tile colours should form a world-space checkerboard
+   with no holes at the seams.
