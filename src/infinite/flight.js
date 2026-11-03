@@ -158,14 +158,14 @@ export class FlightController {
     this.z = 0;
     this.yaw = 0.35;
     this.pitch = -0.08;
-    this.y = this.groundHeight() + 260;
+    this.y = this.groundHeight() + 220;
     this.cruiseTime = 0;
   }
 
   warpTo(x, z, y = null) {
     this.x = x;
     this.z = z;
-    this.y = y === null ? this.groundHeight() + 260 : y;
+    this.y = y === null ? this.groundHeight() + 220 : y;
     this.cruiseTime = 0;
   }
 
@@ -187,7 +187,7 @@ export class FlightController {
       this.x += fwdX * cruiseSpeed * dt;
       this.z += fwdZ * cruiseSpeed * dt;
 
-      const targetY = ground + 210;
+      const targetY = ground + 180;
       this.y += (targetY - this.y) * Math.min(1, dt * 0.7);
     } else {
       const cosPitch = Math.cos(this.pitch);

@@ -38,7 +38,7 @@ Non-goals:
 | LOD seams | Explicit 2:1 stitch strips (fine edge + coarse-layer chord) + a skirt at the final horizon edge |
 | Flight UX | Free-fly (pointer lock + WASD) with an optional auto-cruise toggle |
 | Normal maps | Always on; no vertex-normal A/B mode on this page |
-| Quality target | Mobile-friendly: `S0 = 8 m`, 8 LODs, ~114k triangles, ~49 km view |
+| Quality target | Coarser mesh + finer maps: `S0 = 16 m`, 7 LODs, 4× normals, ~122k triangles, ~49 km view |
 
 The constants are configurable; the mobile-friendly values are the defaults.
 
@@ -48,13 +48,13 @@ The constants are configurable; the mobile-friendly values are the defaults.
   procedural height function (CPU worker)
             │
             ├── 64×64 height tiles ──┐
-            └── 128×128 normal tiles ┤
+            └── 256×256 normal tiles ┤
                                      ▼
                     toroidal tile cache per LOD
-             (height 256², normal 512² texels/LOD)
+            (height 256², normal 1024² texels/LOD)
                                      │  texSubImage3D
                                      ▼
-              DataArrayTexture  [height R16F | normal RGBA8 @ 2x]
+              DataArrayTexture  [height R16F | normal RGBA8 @ 4x]
                                      │
              ┌───────────────────────┴───────────────────────┐
              │ vertex shader                                 │ fragment shader
@@ -62,7 +62,7 @@ The constants are configurable; the mobile-friendly values are the defaults.
              │ displace clipmap vertex                        │ shade with world-space normal
              └───────────────────────┬───────────────────────┘
                                      ▼
-                  8 camera-centred clipmap rings + centre block
+                  7 camera-centred clipmap rings + centre block
 ```
 
 ## 4. Clipmap geometry
@@ -71,14 +71,14 @@ The constants are configurable; the mobile-friendly values are the defaults.
 
 | Symbol | Value | Meaning |
 |---|---|---|
-| `S0` | 8 m | finest vertex spacing |
+| `S0` | 16 m | finest vertex spacing |
 | `C` | 24 cells | centre-block half-size and ring width |
-| `LEVELS` | 8 | rings at LOD 0 … 7 |
-| `T` | 64 cells | tile size in samples/cells |
+| `LEVELS` | 7 | rings at LOD 0 … 6 |
+| `T` | 64 cells | height tile size in samples/cells |
 | `K` | 4 | tile-cache side in tiles |
 
-The centre block is `2C × 2C = 48 × 48` cells, i.e. 384 m across at
-`S0 = 8 m`. Its half-extent is `C·S0 = 192 m`.
+The centre block is `2C × 2C = 48 × 48` cells, i.e. 768 m across at
+`S0 = 16 m`. Its half-extent is `C·S0 = 384 m`.
 
 Ring `L` has:
 
@@ -87,24 +87,25 @@ Ring `L` has:
 - outer half-extent `2C · S_L`
 - outer half-extent in metres `2C · S0 · 2^L`
 
-With the values above the last ring reaches `2·24·8·2^7 = 49,152 m`
+With the values above the last ring reaches `2·24·16·2^6 = 49,152 m`
 (49 km). Fog is tuned so the last ring is already fully faded before its
 outer edge, which hides the end of the world.
 
-Triangle budget (`C = 24`, `LEVELS = 8`):
+Triangle budget (`C = 24`, `LEVELS = 7`):
 
 | Part | Triangles |
 |---|---:|
 | centre block (`2C` cells square) | ≈ 4.6k |
 | each ring interior (`16C² − 4C² = 12C²` cells) | ≈ 13.8k |
-| 8 rings | ≈ 110.6k |
-| 7 stitch strips + 8 skirts | ≈ 20.4k |
-| **terrain total** | **≈ 135.5k** |
-| + sky | ≈ 139k rendered |
+| 7 rings | ≈ 96.8k |
+| 6 stitch strips + 7 skirts | ≈ 17.7k |
+| **terrain total** | **≈ 119k** |
+| + sky | ≈ 122k rendered |
 
 That is intentionally modest: the detail comes from the normal map, not from
-the triangle count. The near field is coarse (8 m vertices), but the normal
-map provides the high-frequency shading.
+the triangle count. The near field is deliberately coarse (16 m vertices),
+while the normal map supplies 4 m detail — a 4× resolution ratio, much closer
+to the first PoC's 10× than the earlier 2× version.
 
 ### 4.2 Why nested rings with 2:1 steps
 
@@ -148,7 +149,7 @@ clipOrigin = floor(camera.xz / S0) * S0
 ```
 
 Every level's vertices are `clipOrigin + cell · S_L`, so LOD boundaries never
-drift relative to each other. The origin snaps in 8 m steps; the terrain
+drift relative to each other. The origin snaps in 16 m steps; the terrain
 itself is sampled in world coordinates, so the height field appears
 stationary while the mesh grid snaps. Level 0 lands exactly on its grid;
 coarser levels shift by at most half a cell, which is negligible at their
@@ -161,17 +162,17 @@ screen size.
 For each LOD `L`:
 
 - height layer: `R16F`, normalized height in `[0,1]` (core-filterable in
-  WebGL2; the half-float step is well below the 8 m vertex spacing)
+  WebGL2; the half-float step is well below the 16 m vertex spacing)
 - normal layer: `RGBA8`, object-space normal encoded
   `R=N.x`, `G=N.z`, `B=N.y` (same convention as the existing PoC)
 
 Both are WebGL2 `DataArrayTexture`s with `LEVELS` layers:
 
-- height: `256 × 256` texels per layer (`4 × 4` tiles of `64 × 64`) ≈ 1.0 MB
-- normal: `512 × 512` texels per layer (`4 × 4` tiles of `128 × 128`) ≈ 8.4 MB
+- height: `256 × 256` texels per layer (`4 × 4` tiles of `64 × 64`) ≈ 0.9 MB
+- normal: `1024 × 1024` texels per layer (`4 × 4` tiles of `256 × 256`) ≈ 28 MB
 
-The normal map is baked at **2× the height-tile resolution**, so it can carry
-detail below the clipmap's 8 m near-field vertex spacing. Sampling uses
+The normal map is baked at **4× the height-tile resolution**, so it can carry
+detail well below the clipmap's 16 m near-field vertex spacing. Sampling uses
 `sampler2DArray` in both the vertex and fragment shaders. `RepeatWrapping` +
 linear filtering gives free bilinear interpolation across tile and cache
 boundaries.
@@ -216,13 +217,13 @@ This is equivalent to the formula above but avoids large float values.
 A tile at LOD `L` contains:
 
 - 64×64 height samples at `S_L` spacing;
-- 128×128 normals at `S_L/2` spacing, baked from a **130×130** float height
+- 256×256 normals at `S_L/4` spacing, baked from a **258×258** float height
   patch (one-sample halo), so Sobel normals at tile edges agree with the
   neighbouring tile;
 - height in normalized `[0,1]`, normals quantised to RGB8 only after
   computing the unit normal from float heights (the existing PoC's rule).
 
-At LOD `L` the Sobel scale is `heightScale / (8·(S_L/2))`. Fine levels
+At LOD `L` the Sobel scale is `heightScale / (8·(S_L/4))`. Fine levels
 recover fine shading detail; coarse levels are naturally band-limited, which
 is desirable for distance.
 
@@ -232,7 +233,7 @@ is desirable for distance.
 2. Main thread converts heights to half-floats.
 3. Direct `gl.texSubImage3D` writes the height tile at
    `(slotX·64, slotY·64, level)` and the normal tile at
-   `(slotX·128, slotY·128, level)`.
+   `(slotX·256, slotY·256, level)`.
 4. Slot bookkeeping records which world tile currently occupies each slot.
 
 No GPU render-to-texture is required. CPU generation reuses the existing
@@ -240,8 +241,9 @@ float Sobel code and keeps the pipeline deterministic.
 
 ### 5.5 On-demand generation
 
-A Web Worker owns the procedural height function and tile generation. The
-main thread requests missing tiles with a priority:
+A pool of up to two Web Workers owns the procedural height function and tile
+generation (the 4× normal bake is ~3.5× the work of the earlier 2× version).
+The main thread requests missing tiles with a priority:
 
 1. tiles visible in the current rings;
 2. the prefetch row/column;
@@ -276,7 +278,7 @@ worldPos      = vec3(local.x, height, local.y)
 
 One height fetch per vertex is enough because the page always lights from
 the normal map. The normal map supplies the high-frequency detail that the
-coarse geometry and the 8 m near-field grid cannot. The `aCoarse` flag is
+coarse geometry and the 16 m near-field grid cannot. The `aCoarse` flag is
 only set on the stitch strip's coarse chord, which must sample the next
 LOD's layer to meet the next ring exactly.
 
@@ -420,36 +422,37 @@ The shipped defaults are:
 
 | Setting | Value |
 |---|---|
-| base spacing | 8 m |
+| base spacing | 16 m |
 | centre/ring width | 24 cells |
-| LODs | 8 (0…7), outer radius 49.152 km |
-| tile size | 64 height samples; 128 normal texels (2×) |
-| cache | 4×4 tiles per LOD |
-| triangles | ≈ 139k including stitch strips |
+| LODs | 7 (0…6), outer radius 49.152 km |
+| tile size | 64 height samples; 256 normal texels (4×) |
+| cache | 4×4 tiles per LOD (112 tiles visible at boot) |
+| triangles | ≈ 122k including stitch strips and sky |
 | draw calls | 4 (sky, centre, rings, stitch) |
 | height format | R16F |
-| normal format | RGBA8, 2× resolution |
+| normal format | RGBA8, 4× resolution |
+| workers | up to 2 tile workers |
 
 Verified on the headless SwiftShader host:
 
-- boot: 128/128 tiles resident, zero upload errors, no console/page errors;
-- 25 km and 500 km warps: 128/128 resident tiles after regeneration;
+- boot: 112/112 tiles resident, zero upload errors, no console/page errors;
+- 25 km and 500 km warps: 112/112 resident tiles after regeneration;
 - 500 km: `PHASE_WRAP` keeps the shader origin at `(237856, 37856)` while
-  the camera stays at render-space `(0, 790, 0)`;
-- normal-map QA: high-frequency `hf = 0.89` vs `0.24` with flat normals
-  (≈3.7× more shading detail);
+  the camera stays in small render-space coordinates;
+- normal-map QA: high-frequency `hf = 2.79` vs `0.23` with flat normals
+  (≈12× more shading detail) — the 4× ratio is now clearly visible;
 - all rings + stitch: no background cracks at 25 km with the sky hidden and
   the clear colour set to magenta; hiding the stitch reveals the expected
   LOD-boundary cracks, confirming the seam test is sensitive.
 
 Remaining honest limitations:
 
-- The far rings are coarse (up to 2048 m vertex spacing at LOD 7); silhouettes
-  and large-scale geometry are therefore smooth, even though the normal map
-  adds detail.
+- The far rings are coarse (up to 1024 m vertex spacing at LOD 6);
+  silhouettes and large-scale geometry are therefore smooth, even though the
+  normal map adds detail.
 - The last ring's edge is hidden by fog and a skirt, not by an actually
   infinite mesh; 49 km is the configured view distance.
 - Normal maps are RGB8, so extreme grazing-angle lighting can still show
   quantisation/aliasing.
-- Tile generation is CPU-bound in a worker; a cold boot on a slow phone can
-  take a few seconds.
+- Tile generation is CPU-bound in workers; a cold boot on a slow phone can
+  take several seconds (the 4× normal bake is ~3.5× the earlier work).

@@ -28,7 +28,7 @@
     <p class="pipeline">
       procedural tiles <span class="arrow">→</span> clipmap rings <span class="arrow">→</span> normal maps
     </p>
-    <p class="tagline">The mesh stays small. The world does not. Heights are displaced in the vertex shader; light comes from a toroidal normal-map cache.</p>
+    <p class="tagline">The mesh stays small. The world does not. 16 m clipmap vertices, 4 m normal texels — height in the vertex shader, light from the tile cache.</p>
   </header>
 
   <!-- Stats -->
@@ -83,6 +83,7 @@
         <label class="check-row"><input type="checkbox" id="wireframe" /> Wireframe</label>
         <label class="check-row"><input type="checkbox" id="lod-debug" /> Show LOD levels</label>
         <label class="check-row"><input type="checkbox" id="tile-debug" /> Show tile grid</label>
+        <p class="info">mesh 16 m · normal map 4 m (4×)</p>
       </section>
 
       <section class="credits">

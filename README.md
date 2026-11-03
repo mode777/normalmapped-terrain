@@ -100,17 +100,19 @@ mesh's perceived detail with **3.5% of its triangles**.
 The second PoC asks a different question: can the *same* normal-map trick
 work when the terrain never ends?
 
-- **Geometry** — one centre block plus 8 nested square rings, spacing
-  `8 m · 2^L`. Each ring is a fixed grid; heights are displaced in the vertex
-  shader. Total ≈ 139k triangles, 4 draw calls.
+- **Geometry** — one centre block plus 7 nested square rings, spacing
+  `16 m · 2^L`. Each ring is a fixed grid; heights are displaced in the
+  vertex shader. Total ≈ 122k triangles, 4 draw calls. The mesh is
+  deliberately coarser than the first PoC.
 - **LOD seams** — a zero-width 2:1 stitch strip at every ring edge. The fine
   edge samples LOD `L`; the coarse chord samples LOD `L+1` with the same UV
   mapping as the next ring, so the two meshes are watertight. A final skirt
   and fog hide the 49 km horizon.
 - **Texture buffer** — a `DataArrayTexture` per map, one layer per LOD.
-  Height is `R16F`; normals are `RGBA8` baked at **2×** the height-tile
-  resolution. A 4×4-tile toroidal cache per layer follows the camera.
-- **Tiles** — a Web Worker generates 64×64 height tiles and 128×128 normal
+  Height is `R16F`; normals are `RGBA8` baked at **4×** the height-tile
+  resolution (256² normal tiles from a 64² height tile, 1024² cache per
+  layer). A 4×4-tile toroidal cache follows the camera.
+- **Tiles** — two Web Workers generate 64×64 height tiles and 256×256 normal
   tiles on demand, with a one-tile prefetch margin. Uploads use direct
   `texSubImage3D`.
 - **Flight** — pointer-lock free-fly (`WASD`, `Q/E`, `Shift`, wheel) plus an
@@ -131,13 +133,15 @@ node tools/screenshot-infinite.mjs --url http://127.0.0.1:4173/infinite.html --o
 node tools/analyze-infinite.mjs shots-infinite
 ```
 
-The headless QA verifies 128 resident tiles at boot, no console/page errors,
+The headless QA verifies 112 resident tiles at boot, no console/page errors,
 warps to 25 km and 500 km, and measures the normal-map contribution:
-`hf = 0.89` with the map vs `0.24` with flat normals on the same view.
+`hf = 2.79` with the map vs `0.23` with flat normals on the same view —
+roughly 12× more high-frequency shading detail, now with a 4× normal-to-mesh
+resolution ratio.
 
-Honest limitations: the far rings are coarse (up to 2048 m vertex spacing at
-LOD 7), so silhouettes are smooth even though shading detail is not; the
-world ends at 49 km behind fog; and tile generation is CPU-bound in a worker.
+Honest limitations: the far rings are coarse (up to 1024 m vertex spacing at
+LOD 6), so silhouettes are smooth even though shading detail is not; the
+world ends at 49 km behind fog; and tile generation is CPU-bound in workers.
 
 ## Documentation
 

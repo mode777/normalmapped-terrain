@@ -101,6 +101,24 @@ const near = (a, b, eps, msg) => {
   }
 }
 
+// ---- 4x normal tile shape -------------------------------------------------
+{
+  const tileSize = 8;
+  const normalScale = 4;
+  const tile = generateTile(hf, {
+    level: 0,
+    tx: 0,
+    ty: 0,
+    tileSize,
+    baseSpacing: 16,
+    heightScale: 1500,
+    normalScale,
+  });
+  assert.equal(tile.heights.length, tileSize * tileSize, 'height tile size');
+  assert.equal(tile.normals.length, (tileSize * normalScale) ** 2 * 4, '4x normal tile size');
+  for (const v of tile.normals) assert.ok(Number.isFinite(v), 'normal byte is finite');
+}
+
 // ---- LOD samples agree where they share a world position ------------------
 {
   const tileSize = 8;

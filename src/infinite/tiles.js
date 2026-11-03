@@ -64,10 +64,10 @@ export class TileStreamer {
     this.queue = [];
     this.jobs = new Map();
     this.requested = new Set();
-    this.inFlight = 0;
-    this.maxInFlight = 2;
     this.jobId = 0;
-    this.workerReady = false;
+    this.workers = [];
+    this.readyWorkers = 0;
+    this.workerCount = Math.max(1, Math.min(2, (navigator.hardwareConcurrency || 4) - 1));
     this.generated = 0;
     this.uploaded = 0;
     this._prime = null;
@@ -104,12 +104,16 @@ export class TileStreamer {
     this.normalScratch.flipY = false;
     this.normalScratch.unpackAlignment = 1;
 
-    this.worker = new Worker(new URL('./terrain-worker.js', import.meta.url), { type: 'module' });
-    this.worker.onmessage = (event) => this._onWorkerMessage(event.data);
-    this.worker.onerror = (event) => {
-      console.error('Terrain worker error:', event.message || event);
-    };
-    this.worker.postMessage({ type: 'init', seed });
+    for (let i = 0; i < this.workerCount; i++) {
+      const worker = new Worker(new URL('./terrain-worker.js', import.meta.url), { type: 'module' });
+      const slot = { worker, ready: false, inFlight: 0 };
+      worker.onmessage = (event) => this._onWorkerMessage(event.data, slot);
+      worker.onerror = (event) => {
+        console.error('Terrain worker error:', event.message || event);
+      };
+      worker.postMessage({ type: 'init', seed });
+      this.workers.push(slot);
+    }
   }
 
   _key(level, tx, ty) {
@@ -194,9 +198,12 @@ export class TileStreamer {
   }
 
   _pump() {
-    if (!this.workerReady) return;
+    if (this.readyWorkers === 0) return;
 
-    while (this.inFlight < this.maxInFlight && this.queue.length > 0) {
+    while (this.queue.length > 0) {
+      const slot = this.workers.find((w) => w.ready && w.inFlight === 0);
+      if (!slot) break;
+
       const job = this.queue.shift();
       if (!this._isDesired(job.level, job.tx, job.ty)) {
         this.requested.delete(job.key);
@@ -204,9 +211,9 @@ export class TileStreamer {
       }
 
       const id = ++this.jobId;
-      this.inFlight++;
+      slot.inFlight++;
       this.jobs.set(id, job);
-      this.worker.postMessage({
+      slot.worker.postMessage({
         type: 'tile',
         id,
         level: job.level,
@@ -220,9 +227,12 @@ export class TileStreamer {
     }
   }
 
-  _onWorkerMessage(msg) {
+  _onWorkerMessage(msg, slot) {
     if (msg.type === 'ready') {
-      this.workerReady = true;
+      if (!slot.ready) {
+        slot.ready = true;
+        this.readyWorkers++;
+      }
       this._pump();
       this._checkPrime();
       this._checkWaitDesired();
@@ -234,7 +244,7 @@ export class TileStreamer {
       const job = this.jobs.get(msg.id);
       if (job) {
         this.jobs.delete(msg.id);
-        this.inFlight = Math.max(0, this.inFlight - 1);
+        slot.inFlight = Math.max(0, slot.inFlight - 1);
         this.requested.delete(job.key);
       }
       this._pump();
@@ -247,7 +257,7 @@ export class TileStreamer {
     if (!job) return;
 
     this.jobs.delete(msg.id);
-    this.inFlight = Math.max(0, this.inFlight - 1);
+    slot.inFlight = Math.max(0, slot.inFlight - 1);
     this.requested.delete(job.key);
     this.generated++;
 
@@ -437,11 +447,12 @@ export class TileStreamer {
       uploaded: this.uploaded,
       uploadErrors: this.uploadErrorCount,
       queued: this.queue.length,
-      inFlight: this.inFlight,
+      inFlight: this.workers.reduce((sum, w) => sum + w.inFlight, 0),
+      workers: this.workerCount,
     };
   }
 
   dispose() {
-    this.worker.terminate();
+    for (const slot of this.workers) slot.worker.terminate();
   }
 }

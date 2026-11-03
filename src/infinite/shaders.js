@@ -131,7 +131,7 @@ export const terrainFragmentShader = /* glsl */ `
     vec3 nm = texture(uNormalArray, vec3(uvNormal, vLevel)).xyz * 2.0 - 1.0;
 
     float edge = max(abs(vWorldPos.x - uClipOrigin.x), abs(vWorldPos.z - uClipOrigin.y)) / spacing;
-    float blend = smoothstep(uCenterCells * 2.0 - 6.0, uCenterCells * 2.0 - 1.0, edge);
+    float blend = smoothstep(uCenterCells * 2.0 - 4.0, uCenterCells * 2.0 - 1.0, edge);
 
     if (vLevel < uLevels - 1.0) {
       float spacing2 = spacing * 2.0;
@@ -171,17 +171,17 @@ export const terrainFragmentShader = /* glsl */ `
     float grassW = (1.0 - smoothstep(0.28, 0.50, hn)) * uGrassStrength;
     float sandW  = (1.0 - smoothstep(0.04, 0.16, hn)) * uSandStrength;
     float snowW  = smoothstep(uSnowStart, uSnowStart + 0.14, hn + hv * 0.08);
-    float steep  = smoothstep(0.30, 0.58, slope);
+    float steep  = smoothstep(0.42, 0.72, slope);
 
     // Rock is the base material. The original PoC started from grass*grassW,
     // which goes black once the grass band fades out on high ground; with an
     // infinite world that would leave whole massifs unlit.
     vec3 albedo = rock;
-    albedo = mix(albedo, grass, grassW * (1.0 - steep * 0.75));
+    albedo = mix(albedo, grass, grassW * (1.0 - steep * 0.65));
     albedo = mix(albedo, sand, sandW * (1.0 - steep));
     albedo = mix(albedo, snow, snowW * (1.0 - steep));
 
-    float slopeShade = mix(1.0, 0.78, smoothstep(0.45, 0.85, slope));
+    float slopeShade = mix(1.0, 0.86, smoothstep(0.55, 0.90, slope));
     vec3 color = albedo * (uSunColor * ndl * 1.9 + hemi * 0.34) * slopeShade;
 
     // ---- specular ------------------------------------------------------

@@ -125,10 +125,11 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
    `uRenderOrigin` passed **modulo `PHASE_WRAP`**. Do not pass absolute
    world coordinates or shift texture data on camera movement.
 10. **Height and normal caches have different texel sizes but the same world
-    tile.** Height is 64² at `S_L`; normal is 128² at `S_L/2` (`normalScale
-    = 2`). The shader uses `uTileCells` for the height UV and
-    `uNormalTileCells = 128` for the normal UV. `T` in the UV formula is the
-    *per-map* tile texel count, not always 64.
+    tile.** Height is 64² at `S_L`; normal is 256² at `S_L/4` (`normalScale
+    = 4`). The shader uses `uTileCells = 64` for the height UV and
+    `uNormalTileCells = 256` for the normal UV. `T` in the UV formula is the
+    *per-map* tile texel count, not always 64. This is the 4× resolution
+    ratio that makes the normal detail visible on the coarser mesh.
 11. **Stitch chords must sample the coarse layer.** `aCoarse = 1` on the
     stitch's coarse vertices adds 1 to `aLevel` for the height fetch only;
     geometry spacing stays at the fine LOD. A stitch built from only fine
@@ -145,9 +146,11 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
     origin; `uRenderOrigin` is `renderOrigin mod PHASE_WRAP` (largest cache
     world size). The camera stays in small render-space coordinates. Do not
     remove the modulo or long flights lose tile phase.
-15. **Clipmap constants:** `S0=8 m`, `C=24` cells, `LEVELS=8`, outer radius
-    ≈49 km, tile 64², cache 4×4. Ring `L` covers `[C·2^L, 2C·2^L]·S0`; the
-    last ring gets the only real skirt.
+15. **Clipmap constants:** `S0=16 m`, `C=24` cells, `LEVELS=7`, outer radius
+    ≈49 km, height tile 64², normal tile 256², cache 4×4. Ring `L` covers
+    `[C·2^L, 2C·2^L]·S0`; the last ring gets the only real skirt. The mesh is
+    deliberately coarse; do not reduce `normalScale` without re-checking the
+    detail-vs-mesh ratio.
 
 ## Conventions & practices
 
@@ -159,10 +162,11 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
 - Perf-relevant constants (fBM octaves, 2048² heightfield, LRU cache size of
   10 geometries, infinite-page `S0`/`LEVELS`/`normalScale`) were chosen to
   keep load < a few seconds and memory sane. Profile before loosening them.
-- The infinite page's tile generation **must stay in the worker**; generating
-  64²/128² tiles on the main thread causes visible hitches at tile crossings.
-  The 4×4 cache already includes a prefetch row/column — don't shrink it to
-  3×3 without testing fast flight.
+- The infinite page's tile generation **must stay in workers**; generating
+  64² height / 256² normal tiles on the main thread causes visible hitches at
+  tile crossings. The streamer uses up to 2 workers because the 4× normal
+  bake is ~3.5× the work of the old 2× version. The 4×4 cache already includes
+  a prefetch row/column — don't shrink it to 3×3 without testing fast flight.
 - The Grand Canyon heightfield is **committed** (`public/data/`) so the site
   needs no network beyond GitHub Pages. Regenerating requires internet access
   to `s3.amazonaws.com/elevation-tiles-prod`.

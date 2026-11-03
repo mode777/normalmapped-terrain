@@ -31,11 +31,11 @@ import { initUI } from './ui.js';
 
 const CONFIG = {
   seed: DEFAULT_SEED,
-  baseSpacing: 8,       // metres between near-field vertices
+  baseSpacing: 16,      // metres between near-field vertices (coarser mesh)
   centerCells: 24,      // centre block half-size and ring width, in cells
-  levels: 8,            // rings at LOD 0..7
+  levels: 7,            // rings at LOD 0..6; 16m * 2^6 keeps the ~49km view
   tileSize: 64,         // height samples per tile side
-  normalScale: 2,       // normal-map texels per height sample
+  normalScale: 4,       // normal-map texels per height sample (4x mesh)
   cacheTiles: 4,        // 4x4 tiles per LOD layer
   heightScale: DEFAULT_HEIGHT_SCALE,
   skirtDepth: 420,      // metres of horizon skirt
@@ -202,14 +202,11 @@ function initRenderer() {
 }
 
 function createTextures() {
-  // R16F is core-filterable in WebGL2 and is the mobile-friendly default.
-  // The half-float step is well below the 8 m vertex spacing.
+  // R16F is core-filterable in WebGL2. The half-float step is well below the
+  // 16 m vertex spacing.
   heightType = THREE.HalfFloatType;
 
-  const heightData = heightType === THREE.FloatType
-    ? new Float32Array(CACHE_SIZE * CACHE_SIZE * CONFIG.levels)
-    : new Uint16Array(CACHE_SIZE * CACHE_SIZE * CONFIG.levels);
-
+  const heightData = new Uint16Array(CACHE_SIZE * CACHE_SIZE * CONFIG.levels);
   heightTexture = new THREE.DataArrayTexture(heightData, CACHE_SIZE, CACHE_SIZE, CONFIG.levels);
   heightTexture.format = THREE.RedFormat;
   heightTexture.type = heightType;
@@ -223,10 +220,8 @@ function createTextures() {
   heightTexture.needsUpdate = true;
   renderer.initTexture(heightTexture);
 
-  normalTexture = new THREE.DataArrayTexture(
-    new Uint8Array(NORMAL_CACHE_SIZE * NORMAL_CACHE_SIZE * CONFIG.levels * 4),
-    NORMAL_CACHE_SIZE, NORMAL_CACHE_SIZE, CONFIG.levels
-  );
+  const normalData = new Uint8Array(NORMAL_CACHE_SIZE * NORMAL_CACHE_SIZE * CONFIG.levels * 4);
+  normalTexture = new THREE.DataArrayTexture(normalData, NORMAL_CACHE_SIZE, NORMAL_CACHE_SIZE, CONFIG.levels);
   normalTexture.format = THREE.RGBAFormat;
   normalTexture.type = THREE.UnsignedByteType;
   normalTexture.minFilter = THREE.LinearFilter;
@@ -236,6 +231,7 @@ function createTextures() {
   normalTexture.generateMipmaps = false;
   normalTexture.flipY = false;
   normalTexture.unpackAlignment = 1;
+  normalTexture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   normalTexture.needsUpdate = true;
   renderer.initTexture(normalTexture);
 }

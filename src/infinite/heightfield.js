@@ -39,6 +39,7 @@ export function makeHeightField(seed = DEFAULT_SEED) {
   const detailNoise = new Perlin(seed + 173);
   const fineNoise = new Perlin(seed + 211);
   const microNoise = new Perlin(seed + 257);
+  const micro2Noise = new Perlin(seed + 283);
 
   function heightAt(x, z) {
     // Domain warp keeps the ranges from looking axis-aligned. Roughly 6 km
@@ -65,6 +66,7 @@ export function makeHeightField(seed = DEFAULT_SEED) {
     const detail = detailNoise.fbm(wx * 1.4e-3, wz * 1.4e-3, 3);
     const fine = fineNoise.fbm(wx * 6.5e-3, wz * 6.5e-3, 3);
     const micro = microNoise.fbm(wx * 2.5e-2, wz * 2.5e-2, 2);
+    const micro2 = micro2Noise.fbm(wx * 6.0e-2, wz * 6.0e-2, 2);
 
     let h = hills * 0.32 * (1 - mask * 0.55)
           + ridge * 0.82 * mask
@@ -72,9 +74,11 @@ export function makeHeightField(seed = DEFAULT_SEED) {
 
     h = Math.pow(h, 1.28);
     h *= 0.72 + 0.55 * cont;
-    h += detail * 0.025;
-    h += fine * 0.012;
-    h += micro * 0.006;
+    // The 4x normal map can resolve these; the 16m mesh cannot.
+    h += detail * 0.030;
+    h += fine * 0.018;
+    h += micro * 0.010;
+    h += micro2 * 0.004;
 
     return clamp01(h);
   }
