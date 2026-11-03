@@ -80,6 +80,14 @@ mesh's perceived detail with **3.5% of its triangles**.
   causes terracing; that's why this pipeline computes normals from the
   *float* field and only quantises the (unit-length) normals themselves.
 
+## Documentation
+
+| Doc | What's inside |
+|---|---|
+| [AGENTS.md](AGENTS.md) | Orientation for AI coding agents: repo map, commands, critical invariants (coordinate/encoding conventions), practices |
+| [docs/PIPELINE.md](docs/PIPELINE.md) | The math: heightfield → Sobel → world-space normals, the no-TBN encoding, strength-slider equivalence, split rendering, SRTM/terrarium decoding, limitations |
+| [docs/VERIFICATION.md](docs/VERIFICATION.md) | Repeatable headless QA (`tools/screenshot.mjs` + `tools/analyze-shots.mjs`), acceptance metrics, manual test pass |
+
 ## Data sources
 
 - **Procedural:** seeded improved Perlin noise (in-house `src/perlin.js`),
@@ -111,6 +119,9 @@ Live at: **https://mode777.github.io/normalmapped-terrain/**
 ## Repo map
 
 ```
+AGENTS.md            orientation for AI coding agents (repo map + invariants)
+docs/PIPELINE.md     the math behind baking and shading
+docs/VERIFICATION.md headless QA recipe + acceptance metrics
 src/perlin.js        seeded improved Perlin + fBM + ridged multifractal
 src/terrain-data.js  dataset builders (procedural + SRTM loader), bilinear sampler
 src/normalmap.js     Sobel normal-map baking in world units   ← the core
@@ -118,6 +129,12 @@ src/geometry.js      displaced grid mesh + computeVertexNormals (baseline)
 src/shaders.js       the custom vertex/fragment shaders       ← the core
 src/main.js          scene, modes, split rendering, sun, stats
 src/ui.js            control panel wiring
-tools/               real-data preprocessing (Node)
+tools/               real-data preprocessing + headless QA drivers (Node)
 public/data/         committed Grand Canyon heightfield + metadata
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE). The Grand Canyon elevation data is derived
+from NASA/NGA SRTM via Mapzen/AWS Terrain Tiles (public domain).
+
