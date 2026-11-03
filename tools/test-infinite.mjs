@@ -9,6 +9,7 @@
 
 import assert from 'node:assert/strict';
 import { makeHeightField, generateTile, bakeTileNormals } from '../src/infinite/heightfield.js';
+import { snapLevelOrigins } from '../src/infinite/origins.js';
 
 const hf = makeHeightField(12345);
 const near = (a, b, eps, msg) => {
@@ -139,6 +140,58 @@ const near = (a, b, eps, msg) => {
       );
     }
   }
+}
+
+// ---- per-level clipmap snapping -------------------------------------------
+{
+  const baseSpacing = 2;
+  const levels = 10;
+  const camX = 12345.6;
+  const camZ = -987.2;
+  const origins = snapLevelOrigins(camX, camZ, baseSpacing, levels);
+
+  for (let level = 0; level < levels; level++) {
+    const s = baseSpacing * 2 ** level;
+    const ox = origins[level * 2];
+    const oz = origins[level * 2 + 1];
+    assert.ok(Math.abs(ox / s - Math.round(ox / s)) < 1e-9, `L${level} x on its own grid`);
+    assert.ok(Math.abs(oz / s - Math.round(oz / s)) < 1e-9, `L${level} z on its own grid`);
+    assert.ok(Math.abs(ox - camX) <= s / 2 + 1e-9, `L${level} x within half a cell`);
+    assert.ok(Math.abs(oz - camZ) <= s / 2 + 1e-9, `L${level} z within half a cell`);
+  }
+
+  // Adjacent rings may only differ by half a coarse cell; clipmap.js relies
+  // on that bound to cover the parent square with a C-1 hole.
+  for (let level = 1; level < levels; level++) {
+    const s = baseSpacing * 2 ** level;
+    for (const axis of [0, 1]) {
+      const d = origins[level * 2 + axis] - origins[(level - 1) * 2 + axis];
+      assert.ok(Math.abs(d) <= s / 2 + 1e-9, `L${level} step within half a cell`);
+      assert.ok(d === 0 || Math.abs(Math.abs(d) - s / 2) < 1e-9,
+        `L${level} step is 0 or half a cell (got ${d})`);
+    }
+  }
+
+  // Rigid between snaps: a sub-cell camera move must not move any origin
+  // (this is what stops the surface from swimming).
+  const still = snapLevelOrigins(camX + 0.2, camZ - 0.2, baseSpacing, levels);
+  for (let i = 0; i < origins.length; i++) {
+    assert.equal(still[i], origins[i], `origin ${i} unchanged within a cell`);
+  }
+}
+
+// ---- ring coverage invariant ----------------------------------------------
+{
+  const centerCells = 24;
+  // Rings above level 0 use a hole at C-1 cells and are clipped back to the
+  // parent square, which sits at C +/- 0.5 in this ring's cells. The hole must
+  // reach past the worst case.
+  const hole = centerCells - 1;
+  const parentNear = centerCells - 0.5;
+  assert.ok(hole <= parentNear, 'ring hole covers the parent square');
+  assert.ok(2 * centerCells >= centerCells + 0.5, 'ring outer edge clears the parent square');
+  // The level-0 ring instead uses hole = C and abuts the centre block, which
+  // shares its lattice and origin, so no clipping is needed there.
 }
 
 console.log('infinite-terrain unit checks: OK');

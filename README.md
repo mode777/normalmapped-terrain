@@ -100,17 +100,21 @@ mesh's perceived detail with **3.5% of its triangles**.
 The second PoC asks a different question: can the *same* normal-map trick
 work when the terrain never ends?
 
-- **Geometry** — one centre block plus 8 nested square rings, spacing
-  `8 m · 2^L`. Each ring is a fixed grid; heights are displaced in the
-  vertex shader. Total ≈ 139k triangles, 4 draw calls.
-- **LOD seams** — a zero-width 2:1 stitch strip at every ring edge. The fine
-  edge samples LOD `L`; the coarse chord samples LOD `L+1` with the same UV
-  mapping as the next ring, so the two meshes are watertight. A final skirt
-  and fog hide the 49 km horizon.
+- **Geometry** — one centre block plus nested square rings, spacing
+  `2 m · 2^L`. Each ring is a fixed grid; heights are displaced in the
+  vertex shader. Total ≈ 165k triangles, 4 draw calls.
+- **LOD snapping** — every ring's origin snaps to **its own** spacing, so a
+  coarse ring is rigid between snaps instead of re-sampling its height tile
+  every frame (the "swimming" that a single shared origin causes). Rings are
+  padded by one cell and clipped to the parent's outer square, so the
+  boundaries stay watertight without stitch geometry; the outer few cells
+  morph into the next-coarse mesh. A final skirt and fog hide the 49 km
+  horizon.
 - **Texture buffer** — a `DataArrayTexture` per map, one layer per LOD.
   Height is `R16F`; normals are `RGBA8` baked at **8×** the height-tile
-  resolution (512² normal tiles from a 64² height tile, 1536² cache per
-  layer). A 3×3-tile toroidal cache exactly covers the visible ring.
+  resolution (512² normal tiles from a 64² height tile, 2048² cache per
+  layer — the WebGL2 ceiling). A 4×4-tile toroidal cache covers the visible
+  ring plus prefetch margin.
 - **Tiles** — two Web Workers generate 64×64 height tiles and 512×512 normal
   tiles on demand. Uploads use direct `texSubImage3D`.
 - **Flight** — pointer-lock free-fly (`WASD`, `Q/E`, `Shift`, wheel) plus an
@@ -131,18 +135,19 @@ node tools/screenshot-infinite.mjs --url http://127.0.0.1:4173/infinite.html --o
 node tools/analyze-infinite.mjs shots-infinite
 ```
 
-The headless QA verifies 72 resident tiles at boot, no console/page errors,
-warps to 25 km and 500 km, and measures the normal-map contribution:
-`hf = 4.26` with the map vs `0.23` with flat normals on the same view —
-roughly 18× more high-frequency shading detail, with an 8× normal-to-mesh
-resolution ratio (8 m mesh, 1 m normal texels).
+The headless QA verifies 160 resident tiles after streaming settles, no
+console/page errors, warps to 25 km and 500 km, a magenta-background crack
+test, and measures the normal-map contribution: `hf = 4.29` with the map vs
+`0.23` with flat normals on the same view — roughly 18× more high-frequency
+shading detail, with an 8× normal-to-mesh resolution ratio (2 m mesh, 0.25 m
+normal texels).
 
 Honest limitations: the far rings are coarse (up to 1024 m vertex spacing at
-LOD 6), so silhouettes are smooth even though shading detail is not; the
+LOD 9), so silhouettes are smooth even though shading detail is not; the
 world ends at 49 km behind fog; tile generation is CPU-bound in workers; and
-the 8× normal cache costs ~72 MiB of GPU texture memory (the CPU-side initial
-buffer is freed after allocation). The cache stays at 1536 texels, below the
-2048 WebGL2 ceiling.
+the 8× normal cache costs ~128 MiB of GPU texture memory (the CPU-side initial
+buffer is freed after allocation). The cache is exactly 2048 texels — the
+WebGL2 ceiling — which is why the spacing was reduced instead of growing it.
 
 ## Documentation
 
@@ -150,7 +155,7 @@ buffer is freed after allocation). The cache stays at 1536 texels, below the
 |---|---|
 | [AGENTS.md](AGENTS.md) | Orientation for AI coding agents: repo map, commands, critical invariants (coordinate/encoding conventions), practices |
 | [docs/PIPELINE.md](docs/PIPELINE.md) | The math: heightfield → Sobel → world-space normals, the no-TBN encoding, strength-slider equivalence, split rendering, SRTM/terrarium decoding, limitations |
-| [docs/INFINITE_TERRAIN_CONCEPT.md](docs/INFINITE_TERRAIN_CONCEPT.md) | The second PoC: clipmap rings, 2:1 stitching with fine/coarse layers, toroidal tile cache, floating origin, decisions and measured results |
+| [docs/INFINITE_TERRAIN_CONCEPT.md](docs/INFINITE_TERRAIN_CONCEPT.md) | The second PoC: per-LOD snapping, padded rings with parent-square trim and morphs, toroidal tile cache, floating origin, decisions and measured results |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | Repeatable headless QA (`tools/screenshot.mjs` + `tools/analyze-shots.mjs`), acceptance metrics, manual test pass |
 
 ## Data sources

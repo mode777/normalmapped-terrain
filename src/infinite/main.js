@@ -17,7 +17,8 @@
 
 import * as THREE from 'three';
 import { makeHeightField, DEFAULT_SEED, DEFAULT_HEIGHT_SCALE } from './heightfield.js';
-import { buildCenterGeometry, buildRingInstances, buildStitchGeometry } from './clipmap.js';
+import { buildCenterInstances, buildRingInstances } from './clipmap.js';
+import { snapLevelOrigins } from './origins.js';
 import { TileStreamer } from './tiles.js';
 import {
   terrainVertexShader,
@@ -39,6 +40,7 @@ const CONFIG = {
   cacheTiles: 4,        // 4x4 tiles per LOD layer; 4*64*8 = 2048 (ceiling)
   heightScale: DEFAULT_HEIGHT_SCALE,
   skirtDepth: 420,      // metres of horizon skirt
+  morphCells: 3,        // outer cells of each ring blended into the next LOD
 };
 
 const OUTER_EXTENT = 2 * CONFIG.centerCells * CONFIG.baseSpacing * Math.pow(2, CONFIG.levels - 1);
@@ -56,6 +58,10 @@ const FOG_DENSITY = 2.4 / OUTER_EXTENT;
 // keeps the uniform small after long flights.
 const PHASE_WRAP = CONFIG.cacheTiles * CONFIG.tileSize * CONFIG.baseSpacing
   * Math.pow(2, CONFIG.levels - 1);
+// Floating-origin granularity. A multiple of every level spacing so vertices
+// land exactly on height-texel centres (no static half-texel bias), and a
+// divisor of PHASE_WRAP so the toroidal phase survives a rebase.
+const RENDER_ORIGIN_STEP = CONFIG.baseSpacing * Math.pow(2, CONFIG.levels + 1);
 
 const state = {
   sunAz: 305,
@@ -67,11 +73,13 @@ const state = {
 };
 
 const renderOrigin = new THREE.Vector2(0, 0);
-const clipOrigin = new THREE.Vector2(0, 0);
+// Absolute world x/z per level, refreshed every frame from the camera.
+const levelOrigins = new Float64Array(CONFIG.levels * 2);
 
 let renderer, scene, camera, sky, skyMat;
 let terrainMat, debugMat, debugGroup;
-let centerMesh, ringMesh, stitchMesh;
+let centerMesh, innerRingMesh, outerRingMesh;
+let originTargets;
 let heightField, flight, streamer, ui;
 let heightTexture, normalTexture;
 let heightType;
@@ -83,6 +91,13 @@ let lastStats = performance.now();
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
 const formatCount = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
 const wrapPhase = (v, m) => ((v % m) + m) % m;
+const bufferSize = new THREE.Vector2();
+
+/** Radians of view per fragment; drives the ring-boundary trim slack. */
+function pixelScale() {
+  renderer.getDrawingBufferSize(bufferSize);
+  return (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / Math.max(1, bufferSize.y);
+}
 
 async function boot() {
   const params = new URLSearchParams(location.search);
@@ -254,7 +269,6 @@ function buildScene() {
     uNormalArray: { value: normalTexture },
     uHeightScale: { value: CONFIG.heightScale },
     uRenderOrigin: { value: new THREE.Vector2(0, 0) },
-    uClipOrigin: { value: new THREE.Vector2(0, 0) },
     uBaseSpacing: { value: CONFIG.baseSpacing },
     uTileCells: { value: CONFIG.tileSize },
     uNormalTileCells: { value: CONFIG.tileSize * CONFIG.normalScale },
@@ -262,6 +276,8 @@ function buildScene() {
     uSkirtDepth: { value: CONFIG.skirtDepth },
     uLevels: { value: CONFIG.levels },
     uCenterCells: { value: CONFIG.centerCells },
+    uMorphCells: { value: CONFIG.morphCells },
+    uPixelScale: { value: pixelScale() },
     uNormalStrength: { value: state.normalStrength },
     uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
     uSunColor: { value: new THREE.Color(1, 0.97, 0.9) },
@@ -298,24 +314,39 @@ function buildScene() {
     polygonOffsetUnits: -2,
   });
 
-  const centerGeo = buildCenterGeometry(CONFIG.centerCells);
-  const ringGeo = buildRingInstances(CONFIG.centerCells, CONFIG.levels);
-  const stitchGeo = buildStitchGeometry(CONFIG.centerCells, CONFIG.levels);
+  const centerGeo = buildCenterInstances(CONFIG.centerCells);
+  // Level 0 shares the centre block's lattice and abuts it exactly; every
+  // coarser ring is padded by a cell and clipped back to the parent square.
+  const innerGeo = buildRingInstances(CONFIG.centerCells, [0], {
+    hole: CONFIG.centerCells,
+    trim: 0,
+  });
+  const outerLevels = Array.from({ length: CONFIG.levels - 1 }, (_, i) => i + 1);
+  const outerGeo = buildRingInstances(CONFIG.centerCells, outerLevels, {
+    outerLevel: CONFIG.levels - 1,
+  });
 
   centerMesh = new THREE.Mesh(centerGeo, terrainMat);
-  ringMesh = new THREE.Mesh(ringGeo, terrainMat);
-  stitchMesh = new THREE.Mesh(stitchGeo, terrainMat);
+  innerRingMesh = new THREE.Mesh(innerGeo, terrainMat);
+  outerRingMesh = new THREE.Mesh(outerGeo, terrainMat);
   centerMesh.name = 'terrain-center';
-  ringMesh.name = 'terrain-rings';
-  stitchMesh.name = 'terrain-stitch';
-  for (const m of [centerMesh, ringMesh, stitchMesh]) {
+  innerRingMesh.name = 'terrain-ring-0';
+  outerRingMesh.name = 'terrain-rings';
+  for (const m of [centerMesh, innerRingMesh, outerRingMesh]) {
     m.frustumCulled = false;
     scene.add(m);
   }
 
+  // Per-frame snapped origins live in instanced attributes.
+  originTargets = [
+    { geo: centerGeo, levels: [0] },
+    { geo: innerGeo, levels: [0] },
+    { geo: outerGeo, levels: outerLevels },
+  ];
+
   debugGroup = new THREE.Group();
   debugGroup.name = 'debug-group';
-  for (const [geo, name] of [[centerGeo, 'center'], [ringGeo, 'rings'], [stitchGeo, 'stitches']]) {
+  for (const [geo, name] of [[centerGeo, 'center'], [innerGeo, 'ring-0'], [outerGeo, 'rings']]) {
     const m = new THREE.Mesh(geo, debugMat);
     m.frustumCulled = false;
     m.name = `debug-${name}`;
@@ -358,32 +389,71 @@ function updateSun() {
 function rebaseOrigin() {
   const limit = 15000;
   if (Math.abs(flight.x - renderOrigin.x) > limit || Math.abs(flight.z - renderOrigin.y) > limit) {
-    renderOrigin.set(
-      Math.round(flight.x / 1000) * 1000,
-      Math.round(flight.z / 1000) * 1000
-    );
+    snapRenderOrigin();
   }
+}
+
+function snapRenderOrigin() {
+  renderOrigin.set(
+    Math.round(flight.x / RENDER_ORIGIN_STEP) * RENDER_ORIGIN_STEP,
+    Math.round(flight.z / RENDER_ORIGIN_STEP) * RENDER_ORIGIN_STEP
+  );
 }
 
 function updateCamera() {
   flight.applyCamera(camera, renderOrigin);
-  clipOrigin.set(
-    Math.floor(camera.position.x / CONFIG.baseSpacing) * CONFIG.baseSpacing,
-    Math.floor(camera.position.z / CONFIG.baseSpacing) * CONFIG.baseSpacing
+
+  // Each level snaps to its own spacing: a ring is rigid between its snaps.
+  // Computed in absolute doubles, then expressed in render space.
+  snapLevelOrigins(flight.x, flight.z, CONFIG.baseSpacing, CONFIG.levels, levelOrigins);
+
+  if (!terrainMat) return;
+
+  terrainMat.uniforms.uRenderOrigin.value.set(
+    wrapPhase(renderOrigin.x, PHASE_WRAP),
+    wrapPhase(renderOrigin.y, PHASE_WRAP)
   );
 
-  if (terrainMat) {
-    terrainMat.uniforms.uClipOrigin.value.copy(clipOrigin);
-    terrainMat.uniforms.uRenderOrigin.value.set(
-      wrapPhase(renderOrigin.x, PHASE_WRAP),
-      wrapPhase(renderOrigin.y, PHASE_WRAP)
-    );
+  for (const { geo, levels } of originTargets) {
+    const origins = geo.getAttribute('aOrigin');
+    const parents = geo.getAttribute('aParentOrigin');
+    const coarser = geo.getAttribute('aCoarseOrigin');
+
+    for (let i = 0; i < levels.length; i++) {
+      const level = levels[i];
+      origins.setXY(
+        i,
+        levelOrigins[level * 2] - renderOrigin.x,
+        levelOrigins[level * 2 + 1] - renderOrigin.y
+      );
+
+      // Rings are clipped to the level inside them. Level 0's parent is the
+      // centre block, which shares level 0's origin.
+      const parent = Math.max(0, level - 1);
+      parents.setXY(
+        i,
+        levelOrigins[parent * 2] - renderOrigin.x,
+        levelOrigins[parent * 2 + 1] - renderOrigin.y
+      );
+
+      // Morph target: the next-coarser level's own lattice.
+      const coarseLevel = Math.min(level + 1, CONFIG.levels - 1);
+      coarser.setXY(
+        i,
+        levelOrigins[coarseLevel * 2] - renderOrigin.x,
+        levelOrigins[coarseLevel * 2 + 1] - renderOrigin.y
+      );
+    }
+
+    origins.needsUpdate = true;
+    parents.needsUpdate = true;
+    coarser.needsUpdate = true;
   }
 }
 
 function resetView() {
   flight.reset();
-  renderOrigin.set(Math.round(flight.x / 1000) * 1000, Math.round(flight.z / 1000) * 1000);
+  snapRenderOrigin();
   flight.setAutoCruise(state.autoCruise);
   updateCamera();
   ui.toast('Position reset');
@@ -393,6 +463,7 @@ function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight, false);
+  if (terrainMat) terrainMat.uniforms.uPixelScale.value = pixelScale();
 }
 
 function animate() {
@@ -464,6 +535,12 @@ function setupQA() {
       debugGroup.visible = on;
       document.getElementById('wireframe').checked = on;
     },
+    // Hides the sky and clears to magenta: any magenta left *inside* the
+    // terrain silhouette is a genuine geometry gap.
+    setCrackDebug: (on) => {
+      renderer.setClearColor(on ? 0xff00ff : 0x0b0f14, 1);
+      sky.visible = !on;
+    },
     waitForTiles: () => streamer.waitForDesired(flight.x, flight.z),
     warpTo: async (x, z, y = null) => {
       flight.setPaused(true);
@@ -471,12 +548,18 @@ function setupQA() {
       flight.setAutoCruise(false);
       ui.setAutoCruise(false);
       flight.warpTo(x, z, y);
-      renderOrigin.set(Math.round(flight.x / 1000) * 1000, Math.round(flight.z / 1000) * 1000);
+      snapRenderOrigin();
       updateCamera();
       streamer.update(flight.x, flight.z, { force: true });
       await streamer.waitForDesired(flight.x, flight.z);
     },
     groundHeight: () => flight.groundHeight(),
+    // Absolute world position and per-level snapped origins (diagnostics).
+    getLevelOrigins: () => ({
+      x: flight.x,
+      z: flight.z,
+      origins: Array.from(levelOrigins),
+    }),
   };
   window.__infinite = qa;
 

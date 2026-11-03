@@ -134,16 +134,14 @@ await page.evaluate(() => {
 });
 await shot('07-tile-grid');
 
-// Remove the stitch mesh: the sky should show through any genuine crack.
+// Crack hunt: hide the sky and clear to magenta. Any magenta left inside the
+// terrain silhouette is a genuine geometry gap, not a missing stitch mesh.
 await page.evaluate(() => {
   window.__infinite.setTileDebug(false);
-  window.__infinite.scene.getObjectByName('terrain-stitch').visible = false;
+  window.__infinite.setCrackDebug(true);
 });
-await shot('08-no-stitch');
-
-await page.evaluate(() => {
-  window.__infinite.scene.getObjectByName('terrain-stitch').visible = true;
-});
+await shot('08-cracks');
+await page.evaluate(() => window.__infinite.setCrackDebug(false));
 
 writeFileSync(`${OUT}/console.json`, JSON.stringify({ errors, messages }, null, 2));
 console.log('ERRORS:', JSON.stringify(errors, null, 2));

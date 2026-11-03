@@ -51,9 +51,10 @@ node tools/analyze-infinite.mjs shots-infinite
 | `src/main.js` | Scene, modes (A/split/B/C), split scissor rendering, sun, caches |
 | `src/ui.js` | DOM control wiring; `initUI(callbacks)` returns a setter API |
 | `src/infinite/heightfield.js` | Infinite seeded height function + per-tile float-Sobel normal baking |
+| `src/infinite/origins.js` | Per-LOD clipmap origins: each level snaps to its own spacing |
 | `src/infinite/terrain-worker.js` | Worker wrapper around `generateTile` (transfers buffers) |
 | `src/infinite/tiles.js` | Toroidal per-LOD tile cache, worker queue, `texSubImage3D` uploads |
-| `src/infinite/clipmap.js` | Centre block, ring grids, 2:1 stitch strips, skirts |
+| `src/infinite/clipmap.js` | Centre block, padded ring grids, parent-square trim, skirts |
 | `src/infinite/shaders.js` | Clipmap vertex/fragment shaders + LOD/tile debug views |
 | `src/infinite/flight.js` | Free-fly / auto-cruise camera in absolute world doubles |
 | `src/infinite/main.js` | Infinite scene, floating origin, texture arrays, UI, stats |
@@ -120,7 +121,7 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
 ### Infinite-terrain invariants (`infinite.html`)
 
 9. **Tile cache is toroidal.** World tile `(tx,ty)` always lives in slot
-   `(tx mod 3, ty mod 3)`. The shader reproduces this with
+   `(tx mod K, ty mod K)`. The shader reproduces this with
    `slot = mod(floor(t), uCacheTiles)`, the half-texel offset, and
    `uRenderOrigin` passed **modulo `PHASE_WRAP`**. Do not pass absolute
    world coordinates or shift texture data on camera movement.
@@ -129,30 +130,48 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
     = 8`). The shader uses `uTileCells = 64` for the height UV and
     `uNormalTileCells = 512` for the normal UV. `T` in the UV formula is the
     *per-map* tile texel count, not always 64. This is the 8× resolution
-    ratio (1 m normal texels vs 8 m mesh) that makes the detail visible.
-11. **Stitch chords must sample the coarse layer.** `aCoarse = 1` on the
-    stitch's coarse vertices adds 1 to `aLevel` for the height fetch only;
-    geometry spacing stays at the fine LOD. A stitch built from only fine
-    heights leaves visible hairline cracks because the coarse bilinear
-    sample differs. See `src/infinite/clipmap.js` + the vertex shader.
-12. **Upload height with `texSubImage3D`, not `copyTextureToTexture`.**
+    ratio (0.25 m normal texels vs 2 m mesh) that makes the detail visible.
+11. **Every LOD snaps to its own spacing.** `snapLevelOrigins()` rounds each
+    origin to a multiple of **its own** `S_L` (`origin_L = round(cam / S_L) *
+    S_L`). A shared finest-level origin makes coarse vertices re-sample their
+    height tile at sub-texel positions as the camera moves: the surface
+    "swims". The independent origins differ by 0 or ±`S_L/2` — the pad in
+    (13) relies on that bound. Do not cascade or share them.
+12. **`RENDER_ORIGIN_STEP` must be a multiple of every `S_L` and divide
+    `PHASE_WRAP`** (it is `S0 · 2^(levels+1)`). Only then do level vertices
+    land on exact height-texel centres; otherwise every level samples at a
+    static half-texel bias.
+13. **Rings are padded one cell and clipped to the parent square.** The
+    level-0 ring uses hole `C` and abuts the centre block (same lattice, no
+    clipping). Rings 1+ use hole `C-1` and discard fragments inside the
+    parent's outer square, with a slack that grows with the pixel footprint.
+    The pad guarantees coverage when the two origins are offset; the clip
+    stops the coarse ring drawing over the fine one. There is **no stitch
+    geometry** — it would need the exact alignment per-level snapping gives
+    up.
+14. **The outer `morphCells` cells morph into the next-coarse height, sampled
+    through the coarse mesh's triangulation** (`coarseMeshHeight`), not
+    bilinearly. Bilinear disagrees with the coarse triangles by up to the
+    LOD error; with a half-cell origin offset that opens slivers at the ring
+    boundary when seen at a grazing angle. If you change the diagonal in
+    `buildRingGeometry`, change it here too.
+15. **Upload height with `texSubImage3D`, not `copyTextureToTexture`.**
     `copyTextureToTexture` produced `GL_INVALID_OPERATION` for R16F array
     layers on SwiftShader. `_rawUpload` also explicitly sets
     `UNPACK_FLIP_Y_WEBGL=false`; keep it.
-13. **Normal maps are always on.** The infinite page deliberately has **no
+16. **Normal maps are always on.** The infinite page deliberately has **no
     vertex-normal A/B**; the first PoC already proves that comparison.
     `uNormalStrength` still scales decoded tangent components.
-14. **Floating origin rebases at ~15 km.** `renderOrigin` is a 2D world
+17. **Floating origin rebases at ~15 km.** `renderOrigin` is a 2D world
     origin; `uRenderOrigin` is `renderOrigin mod PHASE_WRAP` (largest cache
     world size). The camera stays in small render-space coordinates. Do not
     remove the modulo or long flights lose tile phase.
-15. **Clipmap constants:** `S0=8 m`, `C=24` cells, `LEVELS=8`, outer radius
-    ≈49 km, height tile 64², normal tile 512², cache 3×3. Ring `L` covers
-    `[C·2^L, 2C·2^L]·S0`; the last ring gets the only real skirt. Do not
-    reduce `normalScale` without re-checking the detail-vs-mesh ratio. The
-    normal cache is 1536 texels — below the 2048 WebGL2 ceiling. The 3×3
-    cache exactly covers the visible ring; if fast flight produces tile pops,
-    increase it to 4×4 (normal cache becomes 2048 texels, ~128 MiB).
+18. **Clipmap constants:** `S0=2 m`, `C=24` cells, `LEVELS=10`, outer radius
+    ≈49 km, height tile 64², normal tile 512², cache 4×4, `morphCells=3`.
+    Ring `L` covers `[C·S_L, 2C·S_L]` = `[48·2^L, 96·2^L] m`; the last ring
+    gets the only real skirt. Do not reduce `normalScale` without re-checking
+    the detail-vs-mesh ratio. The normal cache is 2048 texels — exactly the
+    WebGL2 ceiling, so the shrink-to-fit in `main.js` stays.
 
 ## Conventions & practices
 

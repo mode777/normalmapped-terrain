@@ -7,6 +7,16 @@
  *   R = N.x (east), G = N.z (+z), B = N.y (up)
  * so no TBN matrix is needed.
  *
+ * Each ring has its own snapped origin (`aOrigin`), so between snaps every
+ * vertex sits exactly on a height-texel centre and the mesh is rigid. The
+ * prices of per-level snapping are paid here:
+ *
+ *   - the ring is clipped (fragment shader) to its parent level's outer
+ *     square, so exactly one level covers any point on the terrain;
+ *   - the outer `uMorphCells` cells of every ring morph to the next-coarse
+ *     height, so the clipped boundary is invisible even though the two
+ *     rings snap at different times.
+ *
  * The tile cache is toroidal: a world tile (tx,ty) always lives in slot
  * (tx mod K, ty mod K). The shader reproduces that mapping from the render
  * origin, which keeps precision stable across floating-origin rebases.
@@ -16,54 +26,104 @@ export const terrainVertexShader = /* glsl */ `
   uniform sampler2DArray uHeightArray;
   uniform float uHeightScale;
   uniform vec2 uRenderOrigin;
-  uniform vec2 uClipOrigin;
   uniform float uBaseSpacing;
   uniform float uTileCells;
   uniform float uCacheTiles;
   uniform float uSkirtDepth;
+  uniform float uLevels;
+  uniform float uCenterCells;
+  uniform float uMorphCells;
 
   attribute float aLevel;
   attribute float aOuter;
-  attribute float aStitch;
+  attribute float aTrim;
   attribute float aSkirt;
-  attribute float aCoarse;
+  attribute vec2 aOrigin;
+  attribute vec2 aParentOrigin;
+  attribute vec2 aCoarseOrigin;
 
   varying vec3 vWorldPos;
   varying float vHeightN;
-  flat varying float vLevel;
-  varying float vStitch;
   varying float vSkirt;
+  varying float vEdge;
+  flat varying float vLevel;
+  flat varying float vTrim;
+  flat varying vec2 vParentOrigin;
 
-  void main() {
-    // Geometry spacing is always the instance LOD. Stitch coarse vertices
-    // fetch the next LOD's height so their chord matches ring L+1 exactly.
-    float sampleLevel = aLevel + aCoarse;
-    float spacing = uBaseSpacing * exp2(aLevel);
-    float sampleSpacing = uBaseSpacing * exp2(sampleLevel);
-    float tileWorld = uTileCells * sampleSpacing;
-
-    // Render-space position. Absolute world = uRenderOrigin + local.
-    vec2 local = uClipOrigin + position.xz * spacing;
-
-    // Toroidal tile-cache UV, including the half-texel offset so a vertex
-    // exactly on a sample reads the texel centre.
+  // Toroidal tile-cache UV for a render-space position, including the
+  // half-texel offset so a vertex exactly on a sample reads the texel centre.
+  vec2 cacheUv(vec2 local, float spacing, float tileCells) {
+    float tileWorld = uTileCells * spacing;
     vec2 phase = mod(uRenderOrigin, uCacheTiles * tileWorld) / tileWorld;
     vec2 t = phase + local / tileWorld;
     vec2 slot = mod(floor(t), uCacheTiles);
-    vec2 uv = (slot + fract(t) + 0.5 / uTileCells) / uCacheTiles;
+    return (slot + fract(t) + 0.5 / tileCells) / uCacheTiles;
+  }
 
-    float hN = texture(uHeightArray, vec3(uv, sampleLevel)).r;
+  // Height of the next-coarser *mesh* at a world position.
+  //
+  // A plain bilinear fetch of the coarse layer does not match the coarse
+  // triangles: with per-level snapping the fine edge usually falls in the
+  // middle of a coarse cell, where bilinear and the two-triangle
+  // interpolation disagree by up to the LOD error. At a grazing angle that
+  // mismatch opens a sliver at the ring boundary. Reproducing the coarse
+  // triangulation here makes the morphed fine edge coincide with it exactly.
+  float coarseMeshHeight(vec2 local, vec2 origin, float coarseSpacing, float coarseLevel) {
+    vec2 g = (local - origin) / coarseSpacing;
+    vec2 cell = floor(g);
+    vec2 f = g - cell;
+
+    float h00 = texture(uHeightArray, vec3(cacheUv(origin + cell * coarseSpacing, coarseSpacing, uTileCells), coarseLevel)).r;
+    float h10 = texture(uHeightArray, vec3(cacheUv(origin + (cell + vec2(1.0, 0.0)) * coarseSpacing, coarseSpacing, uTileCells), coarseLevel)).r;
+    float h01 = texture(uHeightArray, vec3(cacheUv(origin + (cell + vec2(0.0, 1.0)) * coarseSpacing, coarseSpacing, uTileCells), coarseLevel)).r;
+    float h11 = texture(uHeightArray, vec3(cacheUv(origin + (cell + vec2(1.0, 1.0)) * coarseSpacing, coarseSpacing, uTileCells), coarseLevel)).r;
+
+    // Same diagonal as buildRingGeometry: (i+1,j)-(i,j+1).
+    if (f.x + f.y <= 1.0) {
+      return h00 + f.x * (h10 - h00) + f.y * (h01 - h00);
+    }
+    return h11 + (1.0 - f.x) * (h01 - h11) + (1.0 - f.y) * (h10 - h11);
+  }
+
+  void main() {
+    float spacing = uBaseSpacing * exp2(aLevel);
+
+    // Render-space position. Absolute world = uRenderOrigin + local.
+    vec2 local = aOrigin + position.xz * spacing;
+
+    // Distance from the ring's origin in cells (0 at the centre, 2C at the
+    // outer boundary).
+    float edge = max(abs(position.x), abs(position.z));
+
+    // Morph band: the outer cells of the ring blend into the next-coarser
+    // level. The last ring has no coarser level.
+    float morph = 0.0;
+    if (aLevel < uLevels - 1.0) {
+      morph = smoothstep(
+        uCenterCells * 2.0 - max(uMorphCells, 1.0),
+        uCenterCells * 2.0,
+        edge
+      );
+    }
+
+    float hN = texture(uHeightArray, vec3(cacheUv(local, spacing, uTileCells), aLevel)).r;
+    if (morph > 0.0) {
+      float hc = coarseMeshHeight(local, aCoarseOrigin, spacing * 2.0, aLevel + 1.0);
+      hN = mix(hN, hc, morph);
+    }
+
     float h = hN * uHeightScale;
-
     vec3 wp = vec3(local.x, h, local.y);
     // Collapsed for non-last rings (aOuter = 0).
     wp.y -= uSkirtDepth * aSkirt * aOuter;
 
     vWorldPos = wp;
     vHeightN = hN;
-    vLevel = aLevel;
-    vStitch = aStitch;
     vSkirt = aSkirt;
+    vEdge = edge;
+    vLevel = aLevel;
+    vTrim = aTrim;
+    vParentOrigin = aParentOrigin;
 
     gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
   }
@@ -75,13 +135,14 @@ export const terrainFragmentShader = /* glsl */ `
 
   uniform sampler2DArray uNormalArray;
   uniform vec2 uRenderOrigin;
-  uniform vec2 uClipOrigin;
   uniform float uBaseSpacing;
   uniform float uTileCells;
   uniform float uNormalTileCells;
   uniform float uCacheTiles;
   uniform float uLevels;
   uniform float uCenterCells;
+  uniform float uMorphCells;
+  uniform float uPixelScale;
 
   uniform float uNormalStrength;
   uniform vec3 uSunDirection;
@@ -99,9 +160,11 @@ export const terrainFragmentShader = /* glsl */ `
 
   varying vec3 vWorldPos;
   varying float vHeightN;
-  flat varying float vLevel;
-  varying float vStitch;
   varying float vSkirt;
+  varying float vEdge;
+  flat varying float vLevel;
+  flat varying float vTrim;
+  flat varying vec2 vParentOrigin;
 
   vec2 cacheUv(vec2 local, float spacing, float tileCells) {
     float tileWorld = uTileCells * spacing;
@@ -112,6 +175,25 @@ export const terrainFragmentShader = /* glsl */ `
   }
 
   void main() {
+    // Clip each ring to the outer square of the level inside it. Rings above
+    // level 0 are built one cell wider than their nominal boundary, so the
+    // clip turns that overlap into an exact boundary without stitch geometry.
+    //
+    // The cut is pulled inside by a slack: discard is per fragment while MSAA
+    // coverage is per sample, so cutting exactly on the shared edge loses the
+    // samples that fall outside the fine ring's triangles. The slack covers
+    // sub-cell misalignment and grows with the pixel footprint, keeping the
+    // sliver a few pixels wide where the boundary is nearly edge-on.
+    if (vTrim > 0.5) {
+      float spacing = uBaseSpacing * exp2(vLevel);
+      float halfSize = uCenterCells * spacing;
+      vec2 d = abs(vWorldPos.xz - vParentOrigin);
+
+      float footprint = length(vWorldPos - cameraPosition) * uPixelScale;
+      float slack = min(0.125 * spacing + 4.0 * footprint, 0.75 * spacing);
+      if (max(d.x, d.y) < halfSize - slack) discard;
+    }
+
     float spacing = uBaseSpacing * exp2(vLevel);
     vec2 uvNormal = cacheUv(vWorldPos.xz, spacing, uNormalTileCells);
 
@@ -126,12 +208,15 @@ export const terrainFragmentShader = /* glsl */ `
       return;
     }
 
-    // ---- normal map, with a narrow cross-fade to the next LOD near the
-    //      outer edge of the ring ----------------------------------------
+    // ---- normal map, with a narrow cross-fade to the next LOD that matches
+    //      the vertex morph band ------------------------------------------
     vec3 nm = texture(uNormalArray, vec3(uvNormal, vLevel)).xyz * 2.0 - 1.0;
 
-    float edge = max(abs(vWorldPos.x - uClipOrigin.x), abs(vWorldPos.z - uClipOrigin.y)) / spacing;
-    float blend = smoothstep(uCenterCells * 2.0 - 4.0, uCenterCells * 2.0 - 1.0, edge);
+    float blend = smoothstep(
+      uCenterCells * 2.0 - max(uMorphCells, 1.0),
+      uCenterCells * 2.0,
+      vEdge
+    );
 
     if (vLevel < uLevels - 1.0) {
       float spacing2 = spacing * 2.0;
@@ -147,7 +232,6 @@ export const terrainFragmentShader = /* glsl */ `
     if (uDebugLod > 0.5) {
       float t = vLevel / max(uLevels - 1.0, 1.0);
       vec3 c = 0.5 + 0.5 * cos(6.2831853 * (t + vec3(0.0, 0.33, 0.67)));
-      if (vStitch > 0.5) c = vec3(1.0, 0.12, 0.08);
       gl_FragColor = vec4(c, 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
@@ -208,13 +292,28 @@ export const debugVertexShader = terrainVertexShader;
 
 export const debugFragmentShader = /* glsl */ `
   uniform float uLevels;
-  varying float vStitch;
+  uniform float uBaseSpacing;
+  uniform float uCenterCells;
+  uniform float uPixelScale;
+
+  varying vec3 vWorldPos;
   flat varying float vLevel;
+  flat varying float vTrim;
+  flat varying vec2 vParentOrigin;
 
   void main() {
+    // Match the shaded pass: hide each ring's surplus inside the parent square.
+    if (vTrim > 0.5) {
+      float spacing = uBaseSpacing * exp2(vLevel);
+      float halfSize = uCenterCells * spacing;
+      vec2 d = abs(vWorldPos.xz - vParentOrigin);
+      float footprint = length(vWorldPos - cameraPosition) * uPixelScale;
+      float slack = min(0.125 * spacing + 4.0 * footprint, 0.75 * spacing);
+      if (max(d.x, d.y) < halfSize - slack) discard;
+    }
+
     float t = vLevel / max(uLevels - 1.0, 1.0);
     vec3 c = 0.5 + 0.5 * cos(6.2831853 * (t + vec3(0.0, 0.33, 0.67)));
-    if (vStitch > 0.5) c = vec3(1.0, 0.12, 0.08);
     gl_FragColor = vec4(c, 0.9);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>

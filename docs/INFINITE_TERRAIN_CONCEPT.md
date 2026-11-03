@@ -35,10 +35,10 @@ Non-goals:
 | Page location | New `infinite.html` in this repo/site; existing `index.html` untouched |
 | Height source | Procedural infinite only (seeded fBM/ridged), no network |
 | Tile generation | Web Worker, CPU float heights + Sobel normals, sub-texture uploads |
-| LOD seams | Explicit 2:1 stitch strips (fine edge + coarse-layer chord) + a skirt at the final horizon edge |
+| LOD seams | Per-LOD origin snapping + one-cell pad, shader clip to the parent square, coarse-mesh morph band, skirt at the final horizon edge |
 | Flight UX | Free-fly (pointer lock + WASD) with an optional auto-cruise toggle |
 | Normal maps | Always on; no vertex-normal A/B mode on this page |
-| Quality target | Fine maps, 2048-safe cache: `S0 = 8 m`, 8 LODs, 8× normals (1 m texels), ~139k triangles, ~49 km view |
+| Quality target | Fine maps, 2048-safe cache: `S0 = 2 m`, 10 LODs, 8× normals (0.25 m texels), ~165k triangles, ~49 km view |
 
 The constants are configurable; the mobile-friendly values are the defaults.
 
@@ -51,7 +51,7 @@ The constants are configurable; the mobile-friendly values are the defaults.
             └── 512×512 normal tiles ┤
                                      ▼
                     toroidal tile cache per LOD
-            (height 192², normal 1536² texels/LOD)
+            (height 256², normal 2048² texels/LOD)
                                      │  texSubImage3D
                                      ▼
               DataArrayTexture  [height R16F | normal RGBA8 @ 4x]
@@ -62,7 +62,7 @@ The constants are configurable; the mobile-friendly values are the defaults.
              │ displace clipmap vertex                        │ shade with world-space normal
              └───────────────────────┬───────────────────────┘
                                      ▼
-                  7 camera-centred clipmap rings + centre block
+                 9 camera-centred clipmap rings + centre block
 ```
 
 ## 4. Clipmap geometry
@@ -71,14 +71,14 @@ The constants are configurable; the mobile-friendly values are the defaults.
 
 | Symbol | Value | Meaning |
 |---|---|---|
-| `S0` | 8 m | finest vertex spacing |
+| `S0` | 2 m | finest vertex spacing |
 | `C` | 24 cells | centre-block half-size and ring width |
-| `LEVELS` | 8 | rings at LOD 0 … 7 |
+| `LEVELS` | 10 | rings at LOD 0 … 9 |
 | `T` | 64 cells | height tile size in samples/cells |
-| `K` | 3 | tile-cache side in tiles (exactly the visible ring) |
+| `K` | 4 | tile-cache side in tiles (visible ring + prefetch margin) |
 
-The centre block is `2C × 2C = 48 × 48` cells, i.e. 384 m across at
-`S0 = 8 m`. Its half-extent is `C·S0 = 192 m`.
+The centre block is `2C × 2C = 48 × 48` cells, i.e. 96 m across at
+`S0 = 2 m`. Its half-extent is `C·S0 = 48 m`.
 
 Ring `L` has:
 
@@ -87,7 +87,7 @@ Ring `L` has:
 - outer half-extent `2C · S_L`
 - outer half-extent in metres `2C · S0 · 2^L`
 
-With the values above the last ring reaches `2·24·8·2^7 = 49,152 m`
+With the values above the last ring reaches `2·24·2·2^9 = 49,152 m`
 (49 km). Fog is tuned so the last ring is already fully faded before its
 outer edge, which hides the end of the world.
 
@@ -96,64 +96,72 @@ Triangle budget (`C = 24`, `LEVELS = 8`):
 | Part | Triangles |
 |---|---:|
 | centre block (`2C` cells square) | ≈ 4.6k |
-| each ring interior (`16C² − 4C² = 12C²` cells) | ≈ 13.8k |
-| 8 rings | ≈ 110.6k |
-| 7 stitch strips + 8 skirts | ≈ 20.4k |
-| **terrain total** | **≈ 135.5k** |
-| + sky | ≈ 139k rendered |
+| level-0 ring (`24² … 48²` cells) | ≈ 13.8k |
+| 9 padded rings (`46² … 96²` cells) | ≈ 127.8k |
+| 10 skirts (collapsed except the last) | ≈ 15.4k |
+| **terrain total** | **≈ 162k** |
+| + sky | ≈ 165k rendered |
 
 That is still modest: the detail comes from the normal map, not from the
-triangle count. The near field uses 8 m vertices, while the normal map
+triangle count. The near field uses 2 m vertices, while the normal map
 supplies **1 m** detail — an 8× resolution ratio, and 4.4× finer in absolute
 terms than the first PoC's normal map.
 
 ### 4.2 Why nested rings with 2:1 steps
 
-Each ring's inner boundary coincides with the previous ring's outer
-boundary. A ring's inner edge uses the ring's own spacing `S_L`; its outer
-edge is sampled at `2·S_L`, which is exactly the next ring's spacing
-`S_{L+1}`. This makes every LOD boundary share vertex positions and height
-samples.
+Ring `L` covers `[C·S_L, 2C·S_L]` with vertex spacing `S_L = S0·2^L`; the
+next ring's spacing is `2·S_L`, so the ring widths and the LOD steps line
+up. Since every level has its own snapped origin it cannot share vertex
+positions with its neighbour, which is what sections 4.3 and 4.4 solve.
 
-### 4.3 Stitching, not just skirts
+### 4.3 Per-level snapping (the anti-swimming fix)
 
-A naive ring pair leaves T-junctions: the fine edge has twice as many
-vertices as the coarse edge. The implementation builds an explicit
-**zero-width stitch strip** around each ring's outer edge:
+A single shared origin snapped to the *finest* spacing — the obvious
+approach, and the one this PoC shipped first — makes the coarse rings
+swim. A 2 m camera step is a whole cell for LOD 0 but `1/2^L` of a cell for
+ring `L`: every coarse vertex re-samples its height tile between texel
+centres and the surface visibly deforms as the camera moves.
 
-- fine edge `F0–F1–F2` at radius `2C`, vertices every cell, sampled from
-  LOD `L`'s height layer;
-- coarse chord `C0–C2` at the same radius, vertices every two cells,
-  sampled from LOD `L+1`'s height layer;
-- three triangles per coarse segment:
-  `(F0,C0,F1)`, `(F1,C0,C2)`, `(F1,C2,F2)`, plus their reverse windings.
-
-Using **both layers** is important. At a world position that is not exactly
-on a coarse height texel, the fine and coarse bilinearly filtered heights
-differ; a stitch built only from the fine layer leaves a visible hairline
-gap. The coarse chord samples the exact same coarse layer and UV mapping as
-the next ring's inner edge, so the two meshes meet exactly. The fine edge
-samples the same fine layer as the current ring's outer edge.
-
-A small vertical skirt is still added at the very outer edge of the last
-ring as cheap insurance against any floating-point or texture-filtering
-mismatch. The skirt is dropped far enough to hide the horizon edge but is
-fully fogged out in normal flight.
-
-### 4.4 Centring and vertex swimming
-
-All rings share one **clipmap origin** snapped to `S0`:
+Instead each level snaps to **its own** spacing (`src/infinite/origins.js`):
 
 ```
-clipOrigin = floor(camera.xz / S0) * S0
+origin_L = round(camera.xz / S_L) * S_L
 ```
 
-Every level's vertices are `clipOrigin + cell · S_L`, so LOD boundaries never
-drift relative to each other. The origin snaps in 8 m steps; the terrain
-itself is sampled in world coordinates, so the height field appears
-stationary while the mesh grid snaps. Level 0 lands exactly on its grid;
-coarser levels shift by at most half a cell, which is negligible at their
-screen size.
+Between snaps a ring is rigid: same vertex positions, same texels, no
+deformation. Coarse rings now move `2^L` times less often than the finest
+one (LOD 9 snaps once per kilometre of travel). Two origins are multiples of
+`S_L/2` and each is within `S_L/2` of the camera, so the offset between
+neighbours is always **0 or ±half a coarse cell** — the bound the next
+section relies on.
+
+`RENDER_ORIGIN_STEP` (the floating-origin granularity) is a multiple of
+every `S_L`, which keeps every vertex on an exact texel centre instead of a
+static sub-texel bias.
+
+### 4.4 Watertight boundaries without stitches
+
+Per-level snapping gives up the shared boundary, so the old zero-width 2:1
+stitch strips no longer apply. Three pieces replace them:
+
+1. **Pad.** Rings above level 0 are built one cell wider than their nominal
+   hole (`C-1` instead of `C`), guaranteeing coverage even when the inner
+   ring sits half a coarse cell off-centre. The level-0 ring is the
+   exception: it shares the centre block's lattice and origin, so it abuts
+   it exactly (`C`).
+2. **Clip.** The fragment shader discards each ring inside its parent's
+   outer square, so exactly one level covers any point and the coarse ring
+   cannot draw over the fine one. The cut is pulled inward by a slack that
+   grows with the pixel footprint so MSAA samples on the shared edge are
+   always covered.
+3. **Morph.** The outer `morphCells` cells of each ring blend into the next
+   coarse level, reaching 100 % exactly at the boundary. The coarse height
+   is reconstructed through the coarse *mesh's* triangulation, not a
+   bilinear fetch: with the half-cell origin offset a bilinear fetch
+   disagrees with the coarse triangles by up to the LOD error, which at a
+   grazing angle opens a sliver of background at the boundary.
+
+The vertical skirt remains only on the last ring, to hide the horizon edge.
 
 ## 5. Texture buffer / tile cache
 
@@ -162,17 +170,17 @@ screen size.
 For each LOD `L`:
 
 - height layer: `R16F`, normalized height in `[0,1]` (core-filterable in
-  WebGL2; the half-float step is well below the 8 m vertex spacing)
+  WebGL2; the half-float step is well below the 2 m vertex spacing)
 - normal layer: `RGBA8`, object-space normal encoded
   `R=N.x`, `G=N.z`, `B=N.y` (same convention as the existing PoC)
 
 Both are WebGL2 `DataArrayTexture`s with `LEVELS` layers:
 
-- height: `192 × 192` texels per layer (`3 × 3` tiles of `64 × 64`) ≈ 0.56 MiB
-- normal: `1536 × 1536` texels per layer (`3 × 3` tiles of `512 × 512`) ≈ 72 MiB
+- height: `256 × 256` texels per layer (`4 × 4` tiles of `64 × 64`) ≈ 1 MiB
+- normal: `2048 × 2048` texels per layer (`4 × 4` tiles of `512 × 512`) ≈ 128 MiB
 
 The normal map is baked at **8× the height-tile resolution**, so it carries
-1 m detail against the 8 m near-field vertex spacing. Sampling uses
+0.25 m detail against the 2 m near-field vertex spacing. Sampling uses
 `sampler2DArray` in both the vertex and fragment shaders. `RepeatWrapping` +
 linear filtering gives free bilinear interpolation across tile and cache
 boundaries.
@@ -195,12 +203,10 @@ textureUV = (slot + tileUV + 0.5/T) / K
 The `+0.5/T` is the half-texel offset that makes a vertex exactly on a
 height sample read the texel centre rather than its edge.
 
-The cache holds the `3×3` tiles at `camTile − 1 … camTile + 1`, where
-`camTile = floor(cameraWorld / (T·S_L))`. This is exactly the set the visible
-ring can sample: its outer radius is only 0.75 tile. There is no extra
-prefetch row/column; when the camera crosses a tile boundary, the incoming
-row/column is generated while the ring is still a quarter-tile away. Two
-workers make that latency comfortable at the demo's flight speeds.
+The cache holds the `4×4` tiles at `camTile − 2 … camTile + 1`, where
+`camTile = floor(cameraWorld / (T·S_L))`. The visible ring needs `3×3`; the
+fourth row/column is prefetch margin for fast flight. Two workers make the
+tile-crossing latency comfortable at the demo's flight speeds.
 
 The shader does not use absolute world coordinates directly. A floating
 origin (`uRenderOrigin`) plus a per-level tile phase keeps precision stable:
@@ -266,22 +272,25 @@ never.
 Per vertex:
 
 ```
-spacing       = S0 * exp2(instanceLevel)
-sampleLevel   = instanceLevel + aCoarse          // 0 for terrain, 1 for stitch chord
-sampleSpacing = S0 * exp2(sampleLevel)
-local         = clipOrigin + aCell * spacing
-tile          = mod(phase + local / sampleTileWorld, K)
-uv            = (tile + fract(...) + 0.5/T) / K
-hN            = texture(uHeightArray, vec3(uv, sampleLevel)).r
-height        = hN * uHeightScale
-worldPos      = vec3(local.x, height, local.y)
+spacing = S0 * exp2(level)
+local   = levelOrigin + aCell * spacing          // render space
+tile    = mod(phase + local / tileWorld, K)
+uv      = (tile + fract(...) + 0.5/T) / K
+hN      = texture(uHeightArray, vec3(uv, level)).r
+
+morph   = smoothstep(2C - morphCells, 2C, max(|cell.x|, |cell.z|))
+if morph > 0:
+    hN  = mix(hN, coarseMeshHeight(local, coarseOrigin, level + 1), morph)
 ```
 
-One height fetch per vertex is enough because the page always lights from
-the normal map. The normal map supplies the high-frequency detail that the
-coarse geometry and the 8 m near-field grid cannot. The `aCoarse` flag is
-only set on the stitch strip's coarse chord, which must sample the next
-LOD's layer to meet the next ring exactly.
+`coarseMeshHeight()` fetches the four corners of the coarser cell and
+interpolates along the same diagonal `buildRingGeometry` uses, so the
+morphed fine edge coincides with the coarse mesh instead of merely the
+bilinear field. One or five height fetches per vertex, all from the same
+array texture, and the page still lights entirely from the normal map.
+
+The fragment shader also clips each ring to its parent's square (section
+4.4) and cross-fades the normal layers over the same morph band.
 
 ### 6.2 Fragment shader
 
@@ -383,7 +392,7 @@ draw calls/triangles/tile counts if no GPU is available).
 | Risk | Mitigation |
 |---|---|
 | `copyTextureToTexture` format/type mismatch on R16F array layers | Direct `texSubImage3D` uploads; verified zero upload errors on SwiftShader |
-| Stitch chord does not meet the next ring | Coarse chord samples layer `L+1` with the same UV mapping; verified with a magenta-background crack test |
+| Ring boundary shows a crack, or the coarse ring draws over the fine one | One-cell pad + fragment clip to the parent square + coarse-mesh morph; verified with a magenta-background crack test (`08-cracks`) |
 | Visible LOD normal seam | Cross-fade band; test at ring boundaries |
 | Tile generation hitch on tile crossings | Worker + prefetch margin + priority queue |
 | Floating-origin / tile-phase drift after long flights | `PHASE_WRAP` modulo + warp tests at 25/500 km |
@@ -397,8 +406,8 @@ draw calls/triangles/tile counts if no GPU is available).
 2. **Terrain source**: infinite height function, tile generator, worker,
    unit tests.
 3. **GPU cache**: array textures, toroidal slots, upload path, stats.
-4. **Clipmap geometry**: centre block, rings, stitch strips, outer skirt,
-   LOD debug view.
+4. **Clipmap geometry**: centre block, padded rings, parent-square clip,
+   morph band, outer skirt, LOD debug view.
 5. **Shading and flight**: normal-map shading, fog/sky, free-fly controls,
    auto-cruise, floating origin.
 6. **Polish and QA**: UI, loading, headless screenshots, docs, GitHub Pages
@@ -413,7 +422,7 @@ Start with the risky part, not the pretty part:
    Verify in headless WebGL2 and on the verification host.
 2. Add the infinite height function and worker tile generation.
 3. Add the tile cache and toroidal addressing.
-4. Add the clipmap meshes and stitching.
+4. Add the clipmap meshes, per-level snapping and the boundary clip/morph.
 5. Add flight controls, UI, fog/sky.
 6. Verify, document, build, deploy.
 
@@ -423,33 +432,37 @@ The shipped defaults are:
 
 | Setting | Value |
 |---|---|
-| base spacing | 8 m |
+| base spacing | 2 m |
 | centre/ring width | 24 cells |
-| LODs | 8 (0…7), outer radius 49.152 km |
+| LODs | 10 (0…9), outer radius 49.152 km |
 | tile size | 64 height samples; 512 normal texels (8×) |
-| cache | 3×3 tiles per LOD (72 tiles visible at boot) |
-| triangles | ≈ 139k including stitch strips and sky |
-| draw calls | 4 (sky, centre, rings, stitch) |
+| cache | 4×4 tiles per LOD (160 tiles when settled) |
+| morph band | outer 3 cells of every ring |
+| triangles | ≈ 165k including skirts and sky |
+| draw calls | 4 (sky, centre, level-0 ring, rings 1…9) |
 | height format | R16F |
-| normal format | RGBA8, 8× resolution (1 m texels at LOD 0) |
+| normal format | RGBA8, 8× resolution (0.25 m texels at LOD 0) |
 | workers | up to 2 tile workers |
 
 Verified on the headless SwiftShader host:
 
-- boot: 72/72 tiles resident, zero upload errors, no console/page errors;
-- 25 km and 500 km warps: 72/72 resident tiles after regeneration;
-- 500 km: `PHASE_WRAP` keeps the shader origin at `(237856, 37856)` while
-  the camera stays in small render-space coordinates;
-- normal-map QA: high-frequency `hf = 4.26` vs `0.23` with flat normals
-  (≈18.5× more shading detail) — the absolute normal resolution is now 1 m,
-  twice the previous build's 2 m, while the cache remains 1536 texels;
-- all rings + stitch: no background cracks at 25 km with the sky hidden and
-  the clear colour set to magenta; hiding the stitch reveals the expected
-  LOD-boundary cracks, confirming the seam test is sensitive.
+- boot: tiles stream in to 160 resident, zero upload errors, no console/page
+  errors;
+- 25 km and 500 km warps: 160 resident tiles after regeneration;
+- 500 km: `PHASE_WRAP` keeps the shader origin bounded while the camera stays
+  in small render-space coordinates;
+- normal-map QA: high-frequency `hf = 4.29` vs `0.23` with flat normals
+  (≈18.6× more shading detail) at 0.25 m normal texels against a 2 m mesh;
+- per-level snap cadence: over 163 m of auto-cruise, LOD 0 snapped 46 times,
+  LOD 1 41, LOD 2 22 … LOD 8/9 zero, and every origin stayed within
+  `0.5 · S_L` of the camera — coarse rings are rigid, not swimming;
+- crack test: sky hidden and clear colour set to magenta, zero magenta inside
+  the terrain silhouette at 25 km and 500 km; a handful of sub-pixel blends
+  remain at the extreme grazing horizon, below the 0.2 % analyzer budget.
 
 Remaining honest limitations:
 
-- The far rings are coarse (up to 1024 m vertex spacing at LOD 7);
+- The far rings are coarse (up to 1024 m vertex spacing at LOD 9);
   silhouettes and large-scale geometry are therefore smooth, even though the
   normal map adds detail.
 - The last ring's edge is hidden by fog and a skirt, not by an actually
@@ -458,5 +471,5 @@ Remaining honest limitations:
   quantisation/aliasing.
 - Tile generation is CPU-bound in workers; a cold boot on a slow phone can
   take several seconds (the 8× normal bake is ~7× the original per-tile work,
-  plus one extra LOD layer). The normal cache is ~72 MiB of GPU texture
+  plus two extra LOD layers). The normal cache is ~128 MiB of GPU texture
   memory; the CPU-side allocation is freed after the initial upload.

@@ -55,7 +55,7 @@ for (const f of files) {
   console.log(`${f}  sky=${JSON.stringify(sky)}  terrain=${JSON.stringify(terra)}`);
   check(`${f}: terrain has variation`, terra.std > 8, `std=${terra.std}`);
   check(`${f}: no large black holes`, terra.dark < 0.08, `dark=${terra.dark}`);
-  if (!f.includes('lod')) {
+  if (!f.includes('lod') && !f.includes('cracks')) {
     check(`${f}: sky is brighter than terrain`, sky.mean > terra.mean, `sky=${sky.mean} terrain=${terra.mean}`);
   }
 }
@@ -86,6 +86,25 @@ try {
   check('tile-grid view is varied', tiles.std > 20, `std=${tiles.std}`);
 } catch {
   console.log('skip tile-grid check (shot missing)');
+}
+
+// Seam check: sky hidden + magenta clear. The lower half of the frame is
+// guaranteed terrain, so any magenta there is a crack between rings.
+try {
+  const img = load('08-cracks.png');
+  let magenta = 0, n = 0;
+  for (let y = 500; y < 850; y += 2) {
+    for (let x = 120; x < 1480; x += 2) {
+      const i = (y * img.width + x) * 4;
+      if (img.data[i] > 200 && img.data[i + 1] < 60 && img.data[i + 2] > 200) magenta++;
+      n++;
+    }
+  }
+  const frac = magenta / n;
+  console.log(`crack test: magenta=${magenta}/${n} (${(frac * 100).toFixed(2)}%)`);
+  check('no gaps between clipmap rings', frac < 0.002, `magenta=${(frac * 100).toFixed(2)}%`);
+} catch {
+  console.log('skip crack check (shot missing)');
 }
 
 process.exit(failures ? 1 : 0);

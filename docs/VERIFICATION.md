@@ -101,7 +101,7 @@ node tools/analyze-infinite.mjs shots-infinite
 
 `screenshot-infinite.mjs` waits for the worker-generated tile cache, captures
 the default view plus a same-pose flat-normal view, auto-cruise movement, a
-25 km warp, a 500 km warp, the LOD/wire debug view, and a no-stitch view. It
+25 km warp, a 500 km warp, the LOD/wire debug view, and a crack-hunt view. It
 also writes `console.json`; any console/page error fails the run.
 
 `analyze-infinite.mjs` asserts:
@@ -113,25 +113,29 @@ also writes `console.json`; any console/page error fails the run.
 | black-pixel fraction `< 8%` | no large holes or unlit massifs |
 | normal-map `hf > 1.05 ×` flat-normal `hf` | the map is actually contributing detail |
 | LOD debug `std > 20` | the ring-colour view is varied |
+| `< 0.2 %` magenta in the crack shot | no gaps between clipmap rings |
 
 The mesh uses 8 m near-field vertices and the normal map is 8× finer
 (**1 m texels**). The normal-vs-flat `hf` ratio is therefore much larger than
 the previous builds; if it collapses toward ~1×, the normal layer/UV mapping
 or `normalScale` is wrong.
 
-Reference values from the verified build: 72/72 tiles resident, 139k
-triangles, 4 draw calls, 2 workers, normal-map `hf=4.26` vs flat `hf=0.23`,
-zero upload errors, 72 resident tiles after both 25 km and 500 km warps.
-The normal cache is 1536 texels / ~72 MiB, below the 2048 ceiling.
+Reference values from the verified build: 160 resident tiles after streaming
+settles, 165k triangles, 4 draw calls, 2 workers, normal-map `hf=4.29` vs flat
+`hf=0.23`, zero upload errors, 160 resident tiles after both 25 km and 500 km
+warps. The normal cache is 2048 texels / ~128 MiB — the WebGL2 ceiling.
 
 ### Seam/crack test
 
-The stitch bug that produced thin background cracks is easy to reintroduce.
-To make it visible, hide the sky, set the renderer clear colour to magenta,
-and screenshot the terrain with the normal shading. The shipped build shows
-magenta only in the sky; any magenta hairline on the terrain is a real
-geometry gap. The QA driver's `07-no-stitch` shot intentionally hides the
-stitch mesh so a regression is obvious.
+There is no stitch mesh: ring boundaries are a shader-side clip of each ring
+to its parent's outer square, with a one-cell pad absorbing the per-level
+origin offset. A regression shows up as a thin magenta hairline.
+
+`__infinite.setCrackDebug(true)` hides the sky and clears to magenta;
+`08-cracks` is taken at the 500 km warp. `analyze-infinite.mjs` counts pink
+pixels in the lower half of the frame (guaranteed terrain) and fails above
+0.2 %, which is far below what the eye picks up. For a manual check, look at
+the shot directly: magenta is only allowed above the horizon.
 
 Manual pass on a real GPU:
 
@@ -141,7 +145,7 @@ Manual pass on a real GPU:
    `Shift` boosts. Fly low over a ridge; the terrain guard must keep you out
    of the ground.
 3. **Warp / long flight** — let auto-cruise run for a minute; the tile stats
-   should settle back to 72 resident, and the terrain should not swim.
+   should settle back to 160 resident, and the terrain should not swim.
 4. **Normal strength 0 → 2.5** — at 0 the near field goes smooth; at 1 it is
    honest; above ~2 it gets crunchy.
 5. **Show LOD levels / Show tile grid** — ring colours should change at the
