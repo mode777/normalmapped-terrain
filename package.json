@@ -1,0 +1,21 @@
+{
+  "name": "normalmapped-terrain",
+  "version": "1.0.0",
+  "description": "PoC: normal-map-driven terrain shading in Three.js — low-poly mesh lit by a high-res normal map in the pixel shader",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "terrain:grand-canyon": "node tools/build-real-terrain.mjs",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "dependencies": {
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "pngjs": "^7.0.0",
+    "vite": "^7.0.0"
+  }
+}
