@@ -33,7 +33,7 @@ Non-goals:
 | Area | Decision |
 |---|---|
 | Page location | New `infinite.html` in this repo/site; existing `index.html` untouched |
-| Height source | Procedural infinite only (seeded fBM/ridged), no network |
+| Height source | Procedural infinite only (seeded multi-noise composition), no network |
 | Tile generation | Web Worker, CPU float heights + Sobel normals, sub-texture uploads |
 | LOD seams | Per-LOD origin snapping + one-cell pad, shader clip to the parent square, coarse-mesh morph band, skirt at the final horizon edge |
 | Flight UX | Free-fly (pointer lock + WASD) with an optional auto-cruise toggle |

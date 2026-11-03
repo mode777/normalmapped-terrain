@@ -9,7 +9,8 @@ Two proof-of-concept renderers in one repo:
 1. **`index.html`** — a finite terrain with a low-poly mesh whose lighting
    comes from a high-resolution normal map baked from a heightfield. Offers
    A/B/C (vertex normals / normal map / high-res reference), split-screen,
-   and two datasets (procedural fBM + real Grand Canyon SRTM).
+   and two datasets (procedural multi-noise composition + real Grand Canyon
+   SRTM).
 2. **`infinite.html`** — camera-centred clipmap rings over an effectively
    infinite procedural world. Heights are displaced in the vertex shader;
    normals come from a toroidal per-LOD tile cache in `DataArrayTexture`s;
@@ -44,6 +45,7 @@ node tools/analyze-infinite.mjs shots-infinite
 | Path | Purpose |
 |---|---|
 | `src/perlin.js` | Seeded improved Perlin, fBM, ridged multifractal |
+| `src/terrain-compose.js` | Shared terrain composition: multi-noise channels, spline response curves, iterated domain warp, anisotropic ridge spines |
 | `src/terrain-data.js` | Dataset builders; **owns the dataset object shape** |
 | `src/normalmap.js` | Sobel normal-map baking — core of the PoC |
 | `src/geometry.js` | Displaced grid mesh + `computeVertexNormals` (the baseline) |
@@ -66,7 +68,7 @@ node tools/analyze-infinite.mjs shots-infinite
 | `tools/analyze-infinite.mjs` | Pixel/console assertions for the infinite-terrain shots |
 | `tools/analyze-shots.mjs` | Pixel-statistics assertions on the first PoC's screenshots |
 | `public/data/` | Committed Grand Canyon heightfield (uint16 LE) + metadata JSON |
-| `docs/` | PIPELINE.md (the math), INFINITE_TERRAIN_CONCEPT.md, VERIFICATION.md |
+| `docs/` | PIPELINE.md (the math), TERRAIN_RESEARCH.md (composition survey), INFINITE_TERRAIN_CONCEPT.md, VERIFICATION.md |
 
 ## Dataset object shape (terrain-data.js)
 
@@ -80,6 +82,9 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
   worldSizeZ,        // metres along z (rows)
   heightScale,       // metres for heights going 0 -> 1
   heights,           // Float32Array res*res, normalised 0..1
+  defaultView,       // OPTIONAL { position:[x,y,z], target:[x,y,z] } camera
+                     // framing for this dataset (metres); generic diagonal
+                     // view if absent (src/main.js setDataset)
   credit,            // string shown in the UI
   info,              // string[] shown in the UI
 }
@@ -180,9 +185,11 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
 - Runtime dependencies: `three` only. `vite`/`pngjs` are devDependencies
   (pngjs is Node-only, used by tools/). Keep it that way unless there's a
   strong reason.
-- Perf-relevant constants (fBM octaves, 2048² heightfield, LRU cache size of
-  10 geometries, infinite-page `S0`/`LEVELS`/`normalScale`) were chosen to
-  keep load < a few seconds and memory sane. Profile before loosening them.
+- Perf-relevant constants (noise-evaluation count per height sample in
+  `terrain-compose.js` — ~25 finite / ~36 infinite, 2048² heightfield, LRU
+  cache size of 10 geometries, infinite-page `S0`/`LEVELS`/`normalScale`)
+  were chosen to keep load < a few seconds and tile streaming hitch-free.
+  Adding channels costs every tile bake; profile before loosening them.
 - The infinite page's tile generation **must stay in workers**; generating
   64² height / 512² normal tiles on the main thread causes visible hitches at
   tile crossings. The streamer uses up to 2 workers because the 8× normal
@@ -206,6 +213,10 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
 
 - Sobel → world-space normal derivation: `src/normalmap.js` +
   docs/PIPELINE.md.
+- Terrain composition (multi-noise channels, monotone-cubic spline response
+  curves, contrast expansion, iterated domain warp, anisotropic ridge
+  spines): `src/terrain-compose.js` + docs/TERRAIN_RESEARCH.md (sources) +
+  docs/PIPELINE.md (formulas).
 - Strength scaling equivalence: docs/PIPELINE.md.
 - Terrain RGB encoding/decoding (terrarium tiles): `tools/build-real-terrain.mjs`.
 - Web-mercator metres-per-pixel (why worldSizeX == worldSizeZ):

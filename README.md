@@ -38,10 +38,12 @@ heightfield (float, 2048²)  ──Sobel──▶  normal map (RGB, object-space
         └─bilinear downsample─▶  mesh (192², vertex normals = baseline "A")
 ```
 
-1. **Heightfield** — either seeded **fBM Perlin + ridged multifractal + domain
-   warping** (generated in the browser at load time), or **real SRTM radar
-   data** of the Grand Canyon (pre-processed from the public Mapzen/AWS
-   terrain tiles, committed as uint16 + metadata).
+1. **Heightfield** — either a seeded **multi-noise composition** (continent /
+   erosion channels through spline response curves, ridged crests multiplied
+   by anisotropic "spine" bands, iterated domain warping — generated in the
+   browser at load time, see [TERRAIN_RESEARCH.md](TERRAIN_RESEARCH.md)), or
+   **real SRTM radar data** of the Grand Canyon (pre-processed from the public
+   Mapzen/AWS terrain tiles, committed as uint16 + metadata).
 2. **Normal map** — Sobel-filtered gradient of the float heightfield, in *real
    world units* (`dh/dx` in metres/metres), so the baked normals are an honest
    description of the terrain, not an artistic exaggeration (the *Normal
@@ -160,9 +162,10 @@ WebGL2 ceiling — which is why the spacing was reduced instead of growing it.
 
 ## Data sources
 
-- **Procedural:** seeded improved Perlin noise (in-house `src/perlin.js`),
-  fBM 6 octaves + ridged multifractal 8 octaves + domain warp, 2048² samples,
-  deterministic per seed.
+- **Procedural:** seeded improved Perlin noise (in-house `src/perlin.js`)
+  composed through `src/terrain-compose.js` — continent/erosion channels,
+  spline response curves, ridged 8-oct crests × anisotropic spines, iterated
+  domain warp — 2048² samples, deterministic per seed.
 - **Grand Canyon:** NASA/NGA SRTM 1-arc-second radar elevation via the
   public [Mapzen / AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/)
   (terrarium encoding, public domain). `tools/build-real-terrain.mjs`
@@ -197,6 +200,7 @@ docs/PIPELINE.md     the math behind baking and shading
 docs/INFINITE_TERRAIN_CONCEPT.md  clipmap/tile-cache concept + results
 docs/VERIFICATION.md headless QA recipe + acceptance metrics
 src/perlin.js        seeded improved Perlin + fBM + ridged multifractal
+src/terrain-compose.js  shared multi-noise/spline/warp terrain composition
 src/terrain-data.js  dataset builders (procedural + SRTM loader), bilinear sampler
 src/normalmap.js     Sobel normal-map baking in world units   ← the core
 src/geometry.js      displaced grid mesh + computeVertexNormals (baseline)

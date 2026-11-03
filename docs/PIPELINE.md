@@ -30,19 +30,35 @@ Everything starts as a `Float32Array` of `res²` samples normalised to
 Two producers:
 
 - **Procedural** (`src/terrain-data.js`): seeded improved Perlin
-  (`src/perlin.js`), combined as
+  (`src/perlin.js`) composed by the shared `src/terrain-compose.js`
+  (structure below; motivation and sources in
+  [TERRAIN_RESEARCH.md](TERRAIN_RESEARCH.md)):
 
   ```
-  warp(p)     = p + 1500 · (noiseA(p·2.1e-4), noiseB(p·2.1e-4))   // domain warp
-  mask        = smoothstep(0.38, 0.66, 0.5·fbm₃(warp(p)·1.05e-4) + 0.5)
-  hills       = 0.5·fbm₆(warp(p)·3.4e-4) + 0.5
-  ridge       = ridged₈(warp(p)·2.6e-4) / 1.25
-  h           = pow(hills·0.30·(1 − 0.6·mask) + ridge·0.78·mask + 0.16·mask, 1.3)
+  q(p)        = (noiseA(p·fw), noiseB(p·fw))                 // warp level 1
+  r(p)        = fBM₂(p·fw + 1.6·q + offset)                  // warp level 2
+  p′          = p + 0.45·A·q + A·r                            // A = warp amplitude
+  cont        = expand₁.₈(0.5·fbm₂(p·fc) + 0.5)              // continentalness
+  ero         = expand₂.₈(0.5·fbm₃(p′·fe) + 0.5)             // erosion
+  ridge       = ridged₈(p′·fm) / 1.25
+  spine       = expand₂.₈(0.5·fbm₂(rot(p′)·fs) + 0.5)         // stretched bands
+  range       = smoothstep(0.20, 0.52, spine) · smoothstep(0.35, 0.55, cont)
+  hills       = expand₁.₆(0.5·fbm₄(p′·fh) + 0.5)
+  detail      = 0.0045 · fBM₂(p′/64 m) · relief·roughness   // rock micro-relief
+  h           = baseSpline(cont)
+                + reliefSpline(ero) · (0.78 · range · ridge^1.25
+                                     + 0.14 · hills · (1 − 0.5·range))
+                + detail
   h          *= smoothstep(1.0, 0.86, max(|nx−0.5|, |nz−0.5|)·2)  // edge falloff
   ```
 
-  Domain warping prevents axis-aligned looking ranges; the `pow` flattens
-  valleys relative to crests; the edge falloff sinks tile borders below the
+  `rot(p)` rotates `p` by a slowly varying noise-driven angle before one axis
+  is compressed by the anisotropy factor, so ridge bands form curving chains
+  instead of blobs. `expandk(v) = clamp(0.5 + (v−0.5)·k)` restores the
+  contrast that summed-octave fBM loses (its output concentrates around
+  0.5); the splines are monotone-cubic (Fritsch–Carlson) so steep elevation
+  steps cannot overshoot. Iterated domain warping prevents axis-aligned,
+  blobby ranges; the edge falloff sinks tile borders below the
   fog line so the world reads as an endless plateau. Generation runs in
   128-row chunks with `setTimeout(0)` yields so the loading bar animates.
 

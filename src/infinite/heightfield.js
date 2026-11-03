@@ -11,77 +11,52 @@
  * at shared sample positions.
  */
 
-import { Perlin } from '../perlin.js';
+import { makeTerrainComposer } from '../terrain-compose.js';
 
-export const DEFAULT_SEED = 20260214;
+export const DEFAULT_SEED = 20260217;
 export const DEFAULT_HEIGHT_SCALE = 1500; // metres of relief for h in [0,1]
-
-const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
-const smoothstep = (a, b, x) => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-};
 
 /**
  * Creates a seeded, effectively infinite height function.
+ *
+ * The composition (multi-noise channels + spline response curves + iterated
+ * domain warp + anisotropic ridge spines) lives in src/terrain-compose.js
+ * and is shared with the finite PoC; see docs/TERRAIN_RESEARCH.md for the
+ * recipe and its sources. A pure-function height field is what makes the
+ * streaming cache work: no global passes (e.g. erosion simulation) are
+ * possible without seams, so the variety comes from composition alone.
  *
  * Returns normalized heights in [0,1]. Multiply by `heightScale` for metres.
  * The same object can be created in the worker and on the main thread; as
  * long as the seed matches, both evaluate the same field.
  */
 export function makeHeightField(seed = DEFAULT_SEED) {
-  const warpA = new Perlin(seed + 11);
-  const warpB = new Perlin(seed + 29);
-  const continent = new Perlin(seed + 53);
-  const maskNoise = new Perlin(seed + 71);
-  const hillsNoise = new Perlin(seed + 97);
-  const ridgeNoise = new Perlin(seed + 131);
-  const detailNoise = new Perlin(seed + 173);
-  const fineNoise = new Perlin(seed + 211);
-  const microNoise = new Perlin(seed + 257);
-  const micro2Noise = new Perlin(seed + 283);
-
-  function heightAt(x, z) {
-    // Domain warp keeps the ranges from looking axis-aligned. Roughly 6 km
-    // wavelength at the warp frequency; amplitude is in metres.
-    const wx = x + 1900 * warpA.noise2(x * 1.7e-4 + 7.3, z * 1.7e-4);
-    const wz = z + 1900 * warpB.noise2(x * 1.7e-4, z * 1.7e-4 + 3.1);
-
-    // Very low frequency continent/plateau variation (~45 km).
-    const cont = continent.fbm(wx * 2.2e-5, wz * 2.2e-5, 2) * 0.5 + 0.5;
-
-    // Where mountain ranges live (~14 km).
-    let mask = maskNoise.fbm(wx * 7.0e-5, wz * 7.0e-5, 3) * 0.5 + 0.5;
-    mask = smoothstep(0.36, 0.68, mask);
-
-    // Rolling hills (~3.8 km base wavelength).
-    const hills = hillsNoise.fbm(wx * 2.6e-4, wz * 2.6e-4, 5) * 0.5 + 0.5;
-
-    // Ridged multifractal crests (~5.9 km base wavelength).
-    const ridge = Math.min(ridgeNoise.ridged(wx * 1.7e-4, wz * 1.7e-4, 7), 1.25) / 1.25;
-
-    // Multi-scale roughness for the normal map. `fine` and `micro` are below
-    // the clipmap's 8 m vertex spacing, so they live almost entirely in the
-    // normal map — exactly what this PoC is meant to show.
-    const detail = detailNoise.fbm(wx * 1.4e-3, wz * 1.4e-3, 3);
-    const fine = fineNoise.fbm(wx * 6.5e-3, wz * 6.5e-3, 3);
-    const micro = microNoise.fbm(wx * 2.5e-2, wz * 2.5e-2, 2);
-    const micro2 = micro2Noise.fbm(wx * 6.0e-2, wz * 6.0e-2, 2);
-
-    let h = hills * 0.32 * (1 - mask * 0.55)
-          + ridge * 0.82 * mask
-          + mask * 0.18;
-
-    h = Math.pow(h, 1.28);
-    h *= 0.72 + 0.55 * cont;
-    // The 4x normal map can resolve these; the 16m mesh cannot.
-    h += detail * 0.030;
-    h += fine * 0.018;
-    h += micro * 0.010;
-    h += micro2 * 0.004;
-
-    return clamp01(h);
-  }
+  const { heightAt } = makeTerrainComposer({
+    seed,
+    warpWavelength: 5900,
+    warpAmplitude: 1600,
+    continentWavelength: 45000,
+    erosionWavelength: 14300,
+    mountainWavelength: 5900,
+    mountainOctaves: 7,
+    spineWavelength: 6000,
+    spineAnisotropy: 2.4,
+    hillsWavelength: 3850,
+    hillsOctaves: 4,
+    roughnessWavelength: 3000,
+    mountainAmp: 0.74,
+    hillsAmp: 0.15,
+    // Multi-scale roughness for the normal map. Wavelengths run 714 → 17 m
+    // (finest octaves ≈8 m), at and below the clipmap's coarser-ring vertex
+    // spacing, so a large part of this roughness is carried by the normal
+    // map rather than the meshes — exactly what this PoC is meant to show.
+    detailLayers: [
+      { wavelength: 714, amplitude: 0.030, octaves: 3 },
+      { wavelength: 154, amplitude: 0.018, octaves: 3 },
+      { wavelength: 40, amplitude: 0.010, octaves: 2 },
+      { wavelength: 17, amplitude: 0.004, octaves: 2 },
+    ],
+  });
 
   return { seed, heightAt, heightScale: DEFAULT_HEIGHT_SCALE };
 }

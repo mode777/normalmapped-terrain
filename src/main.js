@@ -20,6 +20,10 @@ import { terrainVertexShader, terrainFragmentShader, skyVertexShader, skyFragmen
 import { initUI } from './ui.js';
 
 const REF_SEGMENTS_CAP = 1024;
+// Canonical "generic" view direction for datasets without their own
+// defaultView (restores the original framing behaviour where the boot
+// camera's direction defined it).
+const DEFAULT_VIEW_DIR = new THREE.Vector3(0.55, 0.38, 0.85).normalize();
 
 const state = {
   mode: 'B',            // 'A' | 'split' | 'B' | 'C'
@@ -122,13 +126,18 @@ function initScene() {
 
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 2, 200000);
-  camera.position.set(0.55, 0.38, 0.85).multiplyScalar(9000);
+  // Boot framing: an overlook of the composed ridge chain south of the tile
+  // centre (seed 20260117 puts a 950 m range at (400, −3000) running SSW).
+  // Deterministic — the seed is fixed in terrain-data.js. The sunlit face
+  // points SSE (default sun az 305°), so the camera sits over the south
+  // falloff ring looking back up the slope.
+  camera.position.set(910, 1500, -4394);
   controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = 0.06;
   controls.maxPolarAngle = Math.PI * 0.495;
   controls.minDistance = 150;
-  controls.target.set(0, 350, 0);
+  controls.target.set(400, 710, -3000);
 
   terrainMat = new THREE.ShaderMaterial({
     vertexShader: terrainVertexShader,
@@ -222,9 +231,16 @@ async function setDataset(id, { keepCamera = false } = {}) {
   u.uFogDensity.value = 0.42 / (maxDim * 1.55);
 
   if (!keepCamera) {
-    const dir = camera.position.clone().normalize();
-    camera.position.copy(dir.multiplyScalar(maxDim * 0.95));
-    controls.target.set(0, ds.heightScale * 0.25, 0);
+    const dv = ds.defaultView;
+    if (dv) {
+      camera.position.set(dv.position[0], dv.position[1], dv.position[2]);
+      controls.target.set(dv.target[0], dv.target[1], dv.target[2]);
+    } else {
+      // Generic framing (e.g. Grand Canyon): fixed high diagonal view.
+      const maxDim0 = Math.max(ds.worldSizeX, ds.worldSizeZ);
+      camera.position.copy(DEFAULT_VIEW_DIR).multiplyScalar(maxDim0 * 0.95);
+      controls.target.set(0, ds.heightScale * 0.25, 0);
+    }
   }
   controls.maxDistance = maxDim * 2.2;
   camera.far = maxDim * 8;

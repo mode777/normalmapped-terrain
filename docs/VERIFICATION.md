@@ -31,9 +31,11 @@ error/page error/failed request fails the run).
 
 `hf` is the mean absolute luminance delta between adjacent pixels inside a
 region — a cheap proxy for high-frequency shading detail. Reference values
-from the initial verified build: A=1.8, B=2.9, C=3.1; split differential
-7× (procedural) and 20× (Grand Canyon). If your change makes B converge
-toward A, you broke the thing this repo exists to demonstrate.
+from the verified multi-noise terrain build (Nov 2026): A=2.15, B=3.28,
+C=2.76; split differential 8× (procedural) and 20× (Grand Canyon). (The
+original fBM build measured A=1.8, B=2.9, C=3.1, split 7×/20×.) If your
+change makes B converge toward A, you broke the thing this repo exists to
+demonstrate.
 
 ## Where to run it
 
@@ -115,15 +117,16 @@ also writes `console.json`; any console/page error fails the run.
 | LOD debug `std > 20` | the ring-colour view is varied |
 | `< 0.2 %` magenta in the crack shot | no gaps between clipmap rings |
 
-The mesh uses 8 m near-field vertices and the normal map is 8× finer
-(**1 m texels**). The normal-vs-flat `hf` ratio is therefore much larger than
-the previous builds; if it collapses toward ~1×, the normal layer/UV mapping
-or `normalScale` is wrong.
+The mesh uses 2 m near-field vertices and the normal map is 8× finer
+(**0.25 m texels**). The normal-vs-flat `hf` ratio is therefore much larger
+than the previous builds; if it collapses toward ~1×, the normal layer/UV
+mapping or `normalScale` is wrong.
 
-Reference values from the verified build: 160 resident tiles after streaming
-settles, 165k triangles, 4 draw calls, 2 workers, normal-map `hf=4.29` vs flat
-`hf=0.23`, zero upload errors, 160 resident tiles after both 25 km and 500 km
-warps. The normal cache is 2048 texels / ~128 MiB — the WebGL2 ceiling.
+Reference values from the verified multi-noise terrain build (Nov 2026):
+160 resident tiles after streaming settles, 165k triangles, 4 draw calls,
+2 workers, normal-map `hf=9.16` vs flat `hf=0.23`, zero upload errors,
+160 resident tiles after both 25 km and 500 km warps. The normal cache is
+2048 texels / ~128 MiB — the WebGL2 ceiling.
 
 ### Seam/crack test
 
