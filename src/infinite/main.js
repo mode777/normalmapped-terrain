@@ -31,9 +31,9 @@ import { initUI } from './ui.js';
 
 const CONFIG = {
   seed: DEFAULT_SEED,
-  baseSpacing: 16,      // metres between near-field vertices (coarser mesh)
+  baseSpacing: 8,       // metres between near-field vertices; halves the texel size
   centerCells: 24,      // centre block half-size and ring width, in cells
-  levels: 7,            // rings at LOD 0..6; 16m * 2^6 keeps the ~49km view
+  levels: 8,            // rings at LOD 0..7; 8m * 2^7 keeps the ~49km view
   tileSize: 64,         // height samples per tile side
   normalScale: 8,       // normal-map texels per height sample (8x mesh)
   cacheTiles: 3,        // 3x3 tiles per LOD layer (exactly the visible ring)
@@ -44,6 +44,12 @@ const CONFIG = {
 const OUTER_EXTENT = 2 * CONFIG.centerCells * CONFIG.baseSpacing * Math.pow(2, CONFIG.levels - 1);
 const CACHE_SIZE = CONFIG.cacheTiles * CONFIG.tileSize;
 const NORMAL_CACHE_SIZE = CACHE_SIZE * CONFIG.normalScale;
+// Keep the cache inside WebGL2's guaranteed minimum MAX_TEXTURE_SIZE (2048).
+// Resolution is increased by reducing world spacing, not by growing the cache.
+const MAX_CACHE_TEXELS = 2048;
+if (CACHE_SIZE > MAX_CACHE_TEXELS || NORMAL_CACHE_SIZE > MAX_CACHE_TEXELS) {
+  throw new Error(`tile cache ${CACHE_SIZE}/${NORMAL_CACHE_SIZE} exceeds ${MAX_CACHE_TEXELS} texels`);
+}
 const FOG_DENSITY = 2.4 / OUTER_EXTENT;
 // Largest tile-cache world size. Every lower LOD's cache size divides it, so
 // passing the render origin modulo this value is enough for every layer and

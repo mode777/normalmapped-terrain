@@ -38,7 +38,7 @@ Non-goals:
 | LOD seams | Explicit 2:1 stitch strips (fine edge + coarse-layer chord) + a skirt at the final horizon edge |
 | Flight UX | Free-fly (pointer lock + WASD) with an optional auto-cruise toggle |
 | Normal maps | Always on; no vertex-normal A/B mode on this page |
-| Quality target | Coarser mesh + finer maps: `S0 = 16 m`, 7 LODs, 8× normals (2 m texels), ~122k triangles, ~49 km view |
+| Quality target | Fine maps, 2048-safe cache: `S0 = 8 m`, 8 LODs, 8× normals (1 m texels), ~139k triangles, ~49 km view |
 
 The constants are configurable; the mobile-friendly values are the defaults.
 
@@ -71,14 +71,14 @@ The constants are configurable; the mobile-friendly values are the defaults.
 
 | Symbol | Value | Meaning |
 |---|---|---|
-| `S0` | 16 m | finest vertex spacing |
+| `S0` | 8 m | finest vertex spacing |
 | `C` | 24 cells | centre-block half-size and ring width |
-| `LEVELS` | 7 | rings at LOD 0 … 6 |
+| `LEVELS` | 8 | rings at LOD 0 … 7 |
 | `T` | 64 cells | height tile size in samples/cells |
 | `K` | 3 | tile-cache side in tiles (exactly the visible ring) |
 
-The centre block is `2C × 2C = 48 × 48` cells, i.e. 768 m across at
-`S0 = 16 m`. Its half-extent is `C·S0 = 384 m`.
+The centre block is `2C × 2C = 48 × 48` cells, i.e. 384 m across at
+`S0 = 8 m`. Its half-extent is `C·S0 = 192 m`.
 
 Ring `L` has:
 
@@ -87,25 +87,25 @@ Ring `L` has:
 - outer half-extent `2C · S_L`
 - outer half-extent in metres `2C · S0 · 2^L`
 
-With the values above the last ring reaches `2·24·16·2^6 = 49,152 m`
+With the values above the last ring reaches `2·24·8·2^7 = 49,152 m`
 (49 km). Fog is tuned so the last ring is already fully faded before its
 outer edge, which hides the end of the world.
 
-Triangle budget (`C = 24`, `LEVELS = 7`):
+Triangle budget (`C = 24`, `LEVELS = 8`):
 
 | Part | Triangles |
 |---|---:|
 | centre block (`2C` cells square) | ≈ 4.6k |
 | each ring interior (`16C² − 4C² = 12C²` cells) | ≈ 13.8k |
-| 7 rings | ≈ 96.8k |
-| 6 stitch strips + 7 skirts | ≈ 17.7k |
-| **terrain total** | **≈ 119k** |
-| + sky | ≈ 122k rendered |
+| 8 rings | ≈ 110.6k |
+| 7 stitch strips + 8 skirts | ≈ 20.4k |
+| **terrain total** | **≈ 135.5k** |
+| + sky | ≈ 139k rendered |
 
-That is intentionally modest: the detail comes from the normal map, not from
-the triangle count. The near field is deliberately coarse (16 m vertices),
-while the normal map supplies **2 m** detail — an 8× resolution ratio, now
-finer in absolute terms than the first PoC's 4.4 m normal map.
+That is still modest: the detail comes from the normal map, not from the
+triangle count. The near field uses 8 m vertices, while the normal map
+supplies **1 m** detail — an 8× resolution ratio, and 4.4× finer in absolute
+terms than the first PoC's normal map.
 
 ### 4.2 Why nested rings with 2:1 steps
 
@@ -149,7 +149,7 @@ clipOrigin = floor(camera.xz / S0) * S0
 ```
 
 Every level's vertices are `clipOrigin + cell · S_L`, so LOD boundaries never
-drift relative to each other. The origin snaps in 16 m steps; the terrain
+drift relative to each other. The origin snaps in 8 m steps; the terrain
 itself is sampled in world coordinates, so the height field appears
 stationary while the mesh grid snaps. Level 0 lands exactly on its grid;
 coarser levels shift by at most half a cell, which is negligible at their
@@ -162,17 +162,17 @@ screen size.
 For each LOD `L`:
 
 - height layer: `R16F`, normalized height in `[0,1]` (core-filterable in
-  WebGL2; the half-float step is well below the 16 m vertex spacing)
+  WebGL2; the half-float step is well below the 8 m vertex spacing)
 - normal layer: `RGBA8`, object-space normal encoded
   `R=N.x`, `G=N.z`, `B=N.y` (same convention as the existing PoC)
 
 Both are WebGL2 `DataArrayTexture`s with `LEVELS` layers:
 
-- height: `192 × 192` texels per layer (`3 × 3` tiles of `64 × 64`) ≈ 0.5 MB
-- normal: `1536 × 1536` texels per layer (`3 × 3` tiles of `512 × 512`) ≈ 66 MB
+- height: `192 × 192` texels per layer (`3 × 3` tiles of `64 × 64`) ≈ 0.56 MiB
+- normal: `1536 × 1536` texels per layer (`3 × 3` tiles of `512 × 512`) ≈ 72 MiB
 
-The normal map is baked at **8× the height-tile resolution**, so it can carry
-detail well below the clipmap's 16 m near-field vertex spacing. Sampling uses
+The normal map is baked at **8× the height-tile resolution**, so it carries
+1 m detail against the 8 m near-field vertex spacing. Sampling uses
 `sampler2DArray` in both the vertex and fragment shaders. `RepeatWrapping` +
 linear filtering gives free bilinear interpolation across tile and cache
 boundaries.
@@ -279,7 +279,7 @@ worldPos      = vec3(local.x, height, local.y)
 
 One height fetch per vertex is enough because the page always lights from
 the normal map. The normal map supplies the high-frequency detail that the
-coarse geometry and the 16 m near-field grid cannot. The `aCoarse` flag is
+coarse geometry and the 8 m near-field grid cannot. The `aCoarse` flag is
 only set on the stitch strip's coarse chord, which must sample the next
 LOD's layer to meet the next ring exactly.
 
@@ -423,33 +423,33 @@ The shipped defaults are:
 
 | Setting | Value |
 |---|---|
-| base spacing | 16 m |
+| base spacing | 8 m |
 | centre/ring width | 24 cells |
-| LODs | 7 (0…6), outer radius 49.152 km |
+| LODs | 8 (0…7), outer radius 49.152 km |
 | tile size | 64 height samples; 512 normal texels (8×) |
-| cache | 3×3 tiles per LOD (63 tiles visible at boot) |
-| triangles | ≈ 122k including stitch strips and sky |
+| cache | 3×3 tiles per LOD (72 tiles visible at boot) |
+| triangles | ≈ 139k including stitch strips and sky |
 | draw calls | 4 (sky, centre, rings, stitch) |
 | height format | R16F |
-| normal format | RGBA8, 8× resolution (2 m texels at LOD 0) |
+| normal format | RGBA8, 8× resolution (1 m texels at LOD 0) |
 | workers | up to 2 tile workers |
 
 Verified on the headless SwiftShader host:
 
-- boot: 63/63 tiles resident, zero upload errors, no console/page errors;
-- 25 km and 500 km warps: 63/63 resident tiles after regeneration;
+- boot: 72/72 tiles resident, zero upload errors, no console/page errors;
+- 25 km and 500 km warps: 72/72 resident tiles after regeneration;
 - 500 km: `PHASE_WRAP` keeps the shader origin at `(237856, 37856)` while
   the camera stays in small render-space coordinates;
-- normal-map QA: high-frequency `hf = 4.10` vs `0.23` with flat normals
-  (≈18× more shading detail) — the absolute normal resolution is now 2 m,
-  twice the previous build's 4 m;
+- normal-map QA: high-frequency `hf = 4.26` vs `0.23` with flat normals
+  (≈18.5× more shading detail) — the absolute normal resolution is now 1 m,
+  twice the previous build's 2 m, while the cache remains 1536 texels;
 - all rings + stitch: no background cracks at 25 km with the sky hidden and
   the clear colour set to magenta; hiding the stitch reveals the expected
   LOD-boundary cracks, confirming the seam test is sensitive.
 
 Remaining honest limitations:
 
-- The far rings are coarse (up to 1024 m vertex spacing at LOD 6);
+- The far rings are coarse (up to 1024 m vertex spacing at LOD 7);
   silhouettes and large-scale geometry are therefore smooth, even though the
   normal map adds detail.
 - The last ring's edge is hidden by fog and a skirt, not by an actually
@@ -457,6 +457,6 @@ Remaining honest limitations:
 - Normal maps are RGB8, so extreme grazing-angle lighting can still show
   quantisation/aliasing.
 - Tile generation is CPU-bound in workers; a cold boot on a slow phone can
-  take several seconds (the 8× normal bake is ~7× the original work). The
-  normal cache is ~66 MB of GPU texture memory; the CPU-side allocation is
-  freed after the initial upload.
+  take several seconds (the 8× normal bake is ~7× the original per-tile work,
+  plus one extra LOD layer). The normal cache is ~72 MiB of GPU texture
+  memory; the CPU-side allocation is freed after the initial upload.

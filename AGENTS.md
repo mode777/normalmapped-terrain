@@ -129,7 +129,7 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
     = 8`). The shader uses `uTileCells = 64` for the height UV and
     `uNormalTileCells = 512` for the normal UV. `T` in the UV formula is the
     *per-map* tile texel count, not always 64. This is the 8× resolution
-    ratio (2 m normal texels vs 16 m mesh) that makes the detail visible.
+    ratio (1 m normal texels vs 8 m mesh) that makes the detail visible.
 11. **Stitch chords must sample the coarse layer.** `aCoarse = 1` on the
     stitch's coarse vertices adds 1 to `aLevel` for the height fetch only;
     geometry spacing stays at the fine LOD. A stitch built from only fine
@@ -146,13 +146,13 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
     origin; `uRenderOrigin` is `renderOrigin mod PHASE_WRAP` (largest cache
     world size). The camera stays in small render-space coordinates. Do not
     remove the modulo or long flights lose tile phase.
-15. **Clipmap constants:** `S0=16 m`, `C=24` cells, `LEVELS=7`, outer radius
+15. **Clipmap constants:** `S0=8 m`, `C=24` cells, `LEVELS=8`, outer radius
     ≈49 km, height tile 64², normal tile 512², cache 3×3. Ring `L` covers
-    `[C·2^L, 2C·2^L]·S0`; the last ring gets the only real skirt. The mesh is
-    deliberately coarse; do not reduce `normalScale` without re-checking the
-    detail-vs-mesh ratio. The 3×3 cache exactly covers the visible ring; if
-    fast flight produces tile pops, increase it to 4×4 and the normal cache
-    memory from ~66 MB to ~117 MB.
+    `[C·2^L, 2C·2^L]·S0`; the last ring gets the only real skirt. Do not
+    reduce `normalScale` without re-checking the detail-vs-mesh ratio. The
+    normal cache is 1536 texels — below the 2048 WebGL2 ceiling. The 3×3
+    cache exactly covers the visible ring; if fast flight produces tile pops,
+    increase it to 4×4 (normal cache becomes 2048 texels, ~128 MiB).
 
 ## Conventions & practices
 
@@ -169,7 +169,7 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
   tile crossings. The streamer uses up to 2 workers because the 8× normal
   bake is ~7× the work of the original 2× version. The 3×3 cache exactly
   covers the visible ring; if fast flight shows tile pops, go to 4×4 (and
-  budget ~117 MB for the normal cache instead of ~66 MB).
+  budget ~128 MiB for the normal cache instead of ~72 MiB).
 - The Grand Canyon heightfield is **committed** (`public/data/`) so the site
   needs no network beyond GitHub Pages. Regenerating requires internet access
   to `s3.amazonaws.com/elevation-tiles-prod`.

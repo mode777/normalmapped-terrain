@@ -100,10 +100,9 @@ mesh's perceived detail with **3.5% of its triangles**.
 The second PoC asks a different question: can the *same* normal-map trick
 work when the terrain never ends?
 
-- **Geometry** — one centre block plus 7 nested square rings, spacing
-  `16 m · 2^L`. Each ring is a fixed grid; heights are displaced in the
-  vertex shader. Total ≈ 122k triangles, 4 draw calls. The mesh is
-  deliberately coarser than the first PoC.
+- **Geometry** — one centre block plus 8 nested square rings, spacing
+  `8 m · 2^L`. Each ring is a fixed grid; heights are displaced in the
+  vertex shader. Total ≈ 139k triangles, 4 draw calls.
 - **LOD seams** — a zero-width 2:1 stitch strip at every ring edge. The fine
   edge samples LOD `L`; the coarse chord samples LOD `L+1` with the same UV
   mapping as the next ring, so the two meshes are watertight. A final skirt
@@ -132,17 +131,18 @@ node tools/screenshot-infinite.mjs --url http://127.0.0.1:4173/infinite.html --o
 node tools/analyze-infinite.mjs shots-infinite
 ```
 
-The headless QA verifies 63 resident tiles at boot, no console/page errors,
+The headless QA verifies 72 resident tiles at boot, no console/page errors,
 warps to 25 km and 500 km, and measures the normal-map contribution:
-`hf = 4.10` with the map vs `0.23` with flat normals on the same view —
+`hf = 4.26` with the map vs `0.23` with flat normals on the same view —
 roughly 18× more high-frequency shading detail, with an 8× normal-to-mesh
-resolution ratio (16 m mesh, 2 m normal texels).
+resolution ratio (8 m mesh, 1 m normal texels).
 
 Honest limitations: the far rings are coarse (up to 1024 m vertex spacing at
 LOD 6), so silhouettes are smooth even though shading detail is not; the
 world ends at 49 km behind fog; tile generation is CPU-bound in workers; and
-the 8× normal cache costs ~66 MB of GPU texture memory (the CPU-side initial
-buffer is freed after allocation).
+the 8× normal cache costs ~72 MiB of GPU texture memory (the CPU-side initial
+buffer is freed after allocation). The cache stays at 1536 texels, below the
+2048 WebGL2 ceiling.
 
 ## Documentation
 
