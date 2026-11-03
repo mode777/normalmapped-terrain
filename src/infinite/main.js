@@ -35,8 +35,8 @@ const CONFIG = {
   centerCells: 24,      // centre block half-size and ring width, in cells
   levels: 7,            // rings at LOD 0..6; 16m * 2^6 keeps the ~49km view
   tileSize: 64,         // height samples per tile side
-  normalScale: 4,       // normal-map texels per height sample (4x mesh)
-  cacheTiles: 4,        // 4x4 tiles per LOD layer
+  normalScale: 8,       // normal-map texels per height sample (8x mesh)
+  cacheTiles: 3,        // 3x3 tiles per LOD layer (exactly the visible ring)
   heightScale: DEFAULT_HEIGHT_SCALE,
   skirtDepth: 420,      // metres of horizon skirt
 };
@@ -234,6 +234,12 @@ function createTextures() {
   normalTexture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   normalTexture.needsUpdate = true;
   renderer.initTexture(normalTexture);
+
+  // The CPU-side buffers are only needed for the initial allocation; every
+  // tile after this is uploaded straight to the GPU. Freeing them keeps the
+  // 8x normal cache from costing another ~66 MB on the JS heap.
+  heightTexture.image.data = null;
+  normalTexture.image.data = null;
 }
 
 function buildScene() {

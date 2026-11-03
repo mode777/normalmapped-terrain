@@ -115,13 +115,13 @@ also writes `console.json`; any console/page error fails the run.
 | LOD debug `std > 20` | the ring-colour view is varied |
 
 The default mesh is deliberately coarse (16 m near-field vertices) and the
-normal map is 4× finer (4 m texels). The normal-vs-flat `hf` ratio is therefore
-much larger than the previous 2× build; if it collapses toward ~1×, the normal
-layer/UV mapping or `normalScale` is wrong.
+normal map is 8× finer (**2 m texels**). The normal-vs-flat `hf` ratio is
+therefore much larger than the previous builds; if it collapses toward ~1×,
+the normal layer/UV mapping or `normalScale` is wrong.
 
-Reference values from the verified build: 112/112 tiles resident, 122k
-triangles, 4 draw calls, 2 workers, normal-map `hf=2.79` vs flat `hf=0.23`,
-zero upload errors, 112 resident tiles after both 25 km and 500 km warps.
+Reference values from the verified build: 63/63 tiles resident, 122k
+triangles, 4 draw calls, 2 workers, normal-map `hf=4.10` vs flat `hf=0.23`,
+zero upload errors, 63 resident tiles after both 25 km and 500 km warps.
 
 ### Seam/crack test
 
@@ -140,7 +140,7 @@ Manual pass on a real GPU:
    `Shift` boosts. Fly low over a ridge; the terrain guard must keep you out
    of the ground.
 3. **Warp / long flight** — let auto-cruise run for a minute; the tile stats
-   should settle back to 112 resident, and the terrain should not swim.
+   should settle back to 63 resident, and the terrain should not swim.
 4. **Normal strength 0 → 2.5** — at 0 the near field goes smooth; at 1 it is
    honest; above ~2 it gets crunchy.
 5. **Show LOD levels / Show tile grid** — ring colours should change at the

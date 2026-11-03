@@ -109,12 +109,11 @@ work when the terrain never ends?
   mapping as the next ring, so the two meshes are watertight. A final skirt
   and fog hide the 49 km horizon.
 - **Texture buffer** — a `DataArrayTexture` per map, one layer per LOD.
-  Height is `R16F`; normals are `RGBA8` baked at **4×** the height-tile
-  resolution (256² normal tiles from a 64² height tile, 1024² cache per
-  layer). A 4×4-tile toroidal cache follows the camera.
-- **Tiles** — two Web Workers generate 64×64 height tiles and 256×256 normal
-  tiles on demand, with a one-tile prefetch margin. Uploads use direct
-  `texSubImage3D`.
+  Height is `R16F`; normals are `RGBA8` baked at **8×** the height-tile
+  resolution (512² normal tiles from a 64² height tile, 1536² cache per
+  layer). A 3×3-tile toroidal cache exactly covers the visible ring.
+- **Tiles** — two Web Workers generate 64×64 height tiles and 512×512 normal
+  tiles on demand. Uploads use direct `texSubImage3D`.
 - **Flight** — pointer-lock free-fly (`WASD`, `Q/E`, `Shift`, wheel) plus an
   optional auto-cruise. A floating origin keeps the shader's tile phase
   stable after long flights.
@@ -133,15 +132,17 @@ node tools/screenshot-infinite.mjs --url http://127.0.0.1:4173/infinite.html --o
 node tools/analyze-infinite.mjs shots-infinite
 ```
 
-The headless QA verifies 112 resident tiles at boot, no console/page errors,
+The headless QA verifies 63 resident tiles at boot, no console/page errors,
 warps to 25 km and 500 km, and measures the normal-map contribution:
-`hf = 2.79` with the map vs `0.23` with flat normals on the same view —
-roughly 12× more high-frequency shading detail, now with a 4× normal-to-mesh
-resolution ratio.
+`hf = 4.10` with the map vs `0.23` with flat normals on the same view —
+roughly 18× more high-frequency shading detail, with an 8× normal-to-mesh
+resolution ratio (16 m mesh, 2 m normal texels).
 
 Honest limitations: the far rings are coarse (up to 1024 m vertex spacing at
 LOD 6), so silhouettes are smooth even though shading detail is not; the
-world ends at 49 km behind fog; and tile generation is CPU-bound in workers.
+world ends at 49 km behind fog; tile generation is CPU-bound in workers; and
+the 8× normal cache costs ~66 MB of GPU texture memory (the CPU-side initial
+buffer is freed after allocation).
 
 ## Documentation
 

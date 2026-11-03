@@ -1,15 +1,15 @@
 /**
  * Toroidal clipmap tile streamer.
  *
- * One DataArrayTexture layer per LOD. Each layer is a 4x4 grid of 64x64
- * tiles. A tile at world tile coordinate (tx,ty) always lives in slot
- * (tx mod 4, ty mod 4); the shader uses the same mapping, so no texture
- * data ever has to be shifted when the camera moves.
+ * One DataArrayTexture layer per LOD. Each layer is a 3x3 grid of 64x64
+ * height tiles / 512x512 normal tiles. A tile at world tile coordinate
+ * (tx,ty) always lives in slot (tx mod 3, ty mod 3); the shader uses the
+ * same mapping, so no texture data ever has to be shifted when the camera
+ * moves.
  *
- * Tiles are generated in a worker and uploaded with texSubImage3D (through
- * renderer.copyTextureToTexture). A 4x4 window around the camera is kept
- * resident; the visible rings only need the middle 3x3, leaving one row and
- * column of prefetch margin.
+ * Tiles are generated in workers and uploaded with texSubImage3D. A 3x3
+ * window around the camera exactly covers the visible ring; with two workers
+ * it can generate the incoming row/column before the ring reaches it.
  */
 
 import * as THREE from 'three';
@@ -150,7 +150,7 @@ export class TileStreamer {
       l.desired.fill(null);
 
       // Square window of cacheTiles around the camera tile. For the default
-      // 4x4 this is camTile-2 ... camTile+1; for 5x5 it is -2 ... +2.
+      // 3x3 this is camTile-1 ... camTile+1.
       const half = Math.floor(this.cacheTiles / 2);
       for (let dy = -half; dy < -half + this.cacheTiles; dy++) {
         for (let dx = -half; dx < -half + this.cacheTiles; dx++) {
@@ -416,7 +416,7 @@ export class TileStreamer {
     }
   }
 
-  /** Generate/upload the first 4x4 cache window and resolve when complete. */
+  /** Generate/upload the first 3x3 cache window and resolve when complete. */
   prime(absX, absZ) {
     this.update(absX, absZ, { force: true });
     if (this._allDesiredLoaded()) return Promise.resolve();

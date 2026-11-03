@@ -101,10 +101,10 @@ const near = (a, b, eps, msg) => {
   }
 }
 
-// ---- 4x normal tile shape -------------------------------------------------
+// ---- 8x normal tile shape -------------------------------------------------
 {
   const tileSize = 8;
-  const normalScale = 4;
+  const normalScale = 8;
   const tile = generateTile(hf, {
     level: 0,
     tx: 0,
@@ -115,7 +115,7 @@ const near = (a, b, eps, msg) => {
     normalScale,
   });
   assert.equal(tile.heights.length, tileSize * tileSize, 'height tile size');
-  assert.equal(tile.normals.length, (tileSize * normalScale) ** 2 * 4, '4x normal tile size');
+  assert.equal(tile.normals.length, (tileSize * normalScale) ** 2 * 4, '8x normal tile size');
   for (const v of tile.normals) assert.ok(Number.isFinite(v), 'normal byte is finite');
 }
 
