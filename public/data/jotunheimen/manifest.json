@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "dataset": "jotunheimen",
+  "bakeVersion": 1,
+  "source": {
+    "type": "kartverket-wcs",
+    "crs": "EPSG:25833",
+    "bbox": [
+      130611,
+      6836483,
+      161331,
+      6867203
+    ],
+    "resolution": 10,
+    "url": "https://wcs.geonorge.no/skwms1/wcs.hoyde-dtm-nhm-25833",
+    "coverage": "nhm_dtm_topo_25833"
+  },
+  "license": "CC BY 4.0",
+  "attribution": "© Kartverket, Nasjonal høydemodell DTM 10, CC BY 4.0, modified (resampled, tiled, normals derived).",
+  "localFrame": {
+    "centerE": 145971,
+    "centerN": 6851843,
+    "sizeMeters": 30720,
+    "spacing": 10,
+    "xAxis": "east",
+    "zAxis": "south",
+    "origin": "center"
+  },
+  "baseSpacing": 10,
+  "tileSize": 64,
+  "normalScale": 2,
+  "levels": 6,
+  "heightScale": 2500,
+  "heightRange": [
+    480.4008483886719,
+    2468.4541015625
+  ],
+  "normalizedRange": [
+    0.19216033816337585,
+    0.987381637096405
+  ],
+  "heightEncoding": "uint16le-normalized",
+  "normalEncoding": "rgba8-objectspace",
+  "paths": {
+    "height": "h/{level}/{tx}_{ty}.bin",
+    "normal": "n/{level}/{tx}_{ty}.png",
+    "coarseHeight": "coarse-height.bin",
+    "seamReport": "seam-report.json",
+    "preview": "preview.png"
+  },
+  "coarseHeight": {
+    "file": "coarse-height.bin",
+    "size": 1024,
+    "spacing": 30.029325513196483,
+    "encoding": "uint16le-normalized",
+    "heightScale": 2500
+  },
+  "tileRanges": [
+    {
+      "level": 0,
+      "minTx": -24,
+      "maxTx": 23,
+      "minTy": -24,
+      "maxTy": 23,
+      "count": 2304
+    },
+    {
+      "level": 1,
+      "minTx": -12,
+      "maxTx": 11,
+      "minTy": -12,
+      "maxTy": 11,
+      "count": 576
+    },
+    {
+      "level": 2,
+      "minTx": -6,
+      "maxTx": 5,
+      "minTy": -6,
+      "maxTy": 5,
+      "count": 144
+    },
+    {
+      "level": 3,
+      "minTx": -3,
+      "maxTx": 2,
+      "minTy": -3,
+      "maxTy": 2,
+      "count": 36
+    },
+    {
+      "level": 4,
+      "minTx": -2,
+      "maxTx": 1,
+      "minTy": -2,
+      "maxTy": 1,
+      "count": 16
+    },
+    {
+      "level": 5,
+      "minTx": -1,
+      "maxTx": 0,
+      "minTy": -1,
+      "maxTy": 0,
+      "count": 4
+    }
+  ],
+  "tileCount": 3080,
+  "seamReport": {
+    "file": "seam-report.json",
+    "threshold": 2,
+    "maxError": 1
+  }
+}

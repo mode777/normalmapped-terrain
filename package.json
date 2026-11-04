@@ -12,7 +12,9 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "test:infinite": "node tools/test-infinite.ts"
+    "test:infinite": "node tools/test-infinite.ts",
+    "bake:dem": "node tools/bake-dem.ts",
+    "test:dem": "node tools/test-dem.ts"
   },
   "dependencies": {
     "three": "^0.180.0"
@@ -21,7 +23,9 @@
     "@types/node": "^24.19.2",
     "@types/pngjs": "^6.0.5",
     "@types/three": "^0.180.0",
+    "geotiff": "^3.0.5",
     "pngjs": "^7.0.0",
+    "proj4": "^2.22.0",
     "typescript": "^5.9.3",
     "vite": "^7.0.0"
   }

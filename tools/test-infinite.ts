@@ -8,8 +8,9 @@
  */
 
 import assert from 'node:assert/strict';
-import { makeHeightField, generateTile, bakeTileNormals } from '../src/infinite/heightfield.ts';
-import { snapLevelOrigins } from '../src/infinite/origins.ts';
+import { makeHeightField, generateTile } from '../src/infinite/heightfield.ts';
+import { bakeTileNormals } from '../src/terrain/normals.ts';
+import { snapLevelOrigins } from '../src/terrain/origins.ts';
 
 const hf = makeHeightField(12345);
 const near = (a: number, b: number, eps: number, msg: string): void => {

@@ -1,13 +1,21 @@
-# Infinite Terrain — a Three.js Clipmap PoC
+# Normal-Mapped Terrain — Clipmap PoCs
 
-**Claim:** a small set of camera-centred clipmap rings can render an
-effectively infinite landscape if heights are displaced in the vertex shader
-from a toroidal tile cache and the lighting normals come from per-pixel normal
-maps baked from the same float heightfield.
+**Claim:** a small set of camera-centred clipmap rings can render a landscape
+if heights are displaced in the vertex shader from a toroidal tile cache and
+the lighting normals come from per-pixel normal maps baked from the same float
+heightfield. The same renderer works for both a procedural world and a
+checked-in real DEM.
+
+Two pages share one texture-backed clipmap renderer:
+
+| Page | Dataset | What it proves |
+|---|---|---|
+| [`infinite.html`](https://mode777.github.io/normalmapped-terrain/infinite.html) | Seeded procedural height function, streamed by workers | An effectively infinite world from a small mesh |
+| [`dem.html`](https://mode777.github.io/normalmapped-terrain/dem.html) | Kartverket DTM 10, Jotunheimen, checked in as height/normal tiles | The same renderer consumes offline-baked real terrain |
 
 [![Infinite terrain, clipmap rings and normal-mapped detail](docs/screenshots/infinite-default.png)](https://mode777.github.io/normalmapped-terrain/infinite.html)
 
-## What it demonstrates
+## Infinite procedural page
 
 - **Small mesh, huge world** — one centre block plus nested square rings,
   spacing `2 m · 2^L` for 10 LODs. About 165k triangles and 4 draw calls
@@ -47,7 +55,33 @@ maps baked from the same float heightfield.
 - **Debug views** — LOD colours, wireframe, and a world-space tile-grid
   checkerboard.
 
-## Controls
+## Pre-baked Jotunheimen DEM
+
+[![Pre-baked Jotunheimen terrain](docs/screenshots/dem-jotunheimen.png)](https://mode777.github.io/normalmapped-terrain/dem.html)
+
+`dem.html` renders a 30.72 km × 30.72 km window of Jotunheimen from
+Kartverket's **Nasjonal høydemodell DTM 10**. The height and normal tiles are
+baked offline by `tools/bake-dem.ts`, checked into
+`public/data/jotunheimen/`, and streamed through the same `TileCache` and
+`ClipmapRenderer` as the procedural page.
+
+- **Source:** Kartverket DTM 10 via the Geonorge WCS, EPSG:25833, CC BY 4.0.
+- **Grid:** 10 m, 6 LODs, 2× normal resolution, 3,080 tiles, ~101 MB checked
+  in. The 2× normal PNGs dominate the size.
+- **Bake tool:** Node + `geotiff` + `proj4` + `pngjs`; no GDAL. All LODs come
+  from one height grid, and normals use a one-texel halo so tile edges are
+  continuous.
+- **Finite world:** the camera has a soft boundary, the source clamps
+  out-of-range tiles to the nearest edge, and fog/last-ring skirt hide the
+  boundary.
+- **Attribution:** © Kartverket, Nasjonal høydemodell DTM 10, CC BY 4.0,
+  modified (resampled, tiled, normals derived). See
+  [docs/DEM_DATASET.md](docs/DEM_DATASET.md).
+
+## Infinite page controls
+
+The DEM page uses the same controls, with a bounded auto-cruise orbit instead
+of the unbounded wander.
 
 | Input | Action |
 |---|---|
@@ -62,23 +96,30 @@ maps baked from the same float heightfield.
 
 ```bash
 npm run test:infinite               # Node-only tile/LOD/normal math checks
+npm run test:dem                    # synthetic + checked-in DEM dataset checks
 npm run build && npx vite preview   # serve dist/ on :4173
 
 npm install --no-save puppeteer-core
 node tools/screenshot-infinite.ts \
   --url http://127.0.0.1:4173/infinite.html --out shots-infinite
 node tools/analyze-infinite.ts shots-infinite
+
+node tools/screenshot-dem.ts \
+  --url http://127.0.0.1:4173/dem.html --out shots-dem
+node tools/analyze-dem.ts shots-dem
 ```
 
-The headless QA verifies 160 resident tiles after streaming settles, no
-console/page errors, warps to 25 km and 500 km, a magenta-background crack
+The infinite headless QA verifies 160 resident tiles after streaming settles,
+no console/page errors, warps to 25 km and 500 km, a magenta-background crack
 test, and measures the normal-map contribution against flat normals with an
-8× normal-to-mesh resolution ratio. See
+8× normal-to-mesh resolution ratio. The DEM loop verifies the 3,080-tile
+dataset, an orbit/warp, LOD/tile debug, a boundary view, and the same crack
+test. `test:dem` is the network-free data gate. See
 [docs/VERIFICATION.md](docs/VERIFICATION.md) for the full recipe and reference
 values.
 
-Default CI runs `npm run test:infinite` (the Node-only checks) before building.
-The screenshot comparison loop is intentionally **not** part of the Actions
+Default CI runs `npm run test:infinite`, `npm run test:dem` and `npm run build`.
+The screenshot comparison loops are intentionally **not** part of the Actions
 deployment; use the SSH verification host when debugging a visual regression
 or comparing screenshots.
 
@@ -95,6 +136,10 @@ or comparing screenshots.
   memory (the CPU-side buffer is freed after allocation).
 - The cache is exactly 2048 texels per side — the WebGL2 ceiling — which is
   why the spacing was reduced instead of growing it.
+- The DEM scene is a finite 30.72 km window of 10 m data. Its 2× normal map is
+  interpolated from the same 10 m heights, so it smooths shading but does not
+  invent survey detail. The checked-in dataset is ~101 MB; the 2× normal PNGs
+  are the dominant cost.
 
 ## Documentation
 
@@ -103,6 +148,7 @@ or comparing screenshots.
 | [AGENTS.md](AGENTS.md) | Orientation for AI coding agents: repo map, commands, critical invariants, practices |
 | [openspec/](openspec/) | OpenSpec specs, active change proposals and archive |
 | [docs/INFINITE_TERRAIN_CONCEPT.md](docs/INFINITE_TERRAIN_CONCEPT.md) | Per-LOD snapping, padded rings with parent-square trim and morphs, toroidal tile cache, floating origin, decisions and measured results |
+| [docs/DEM_DATASET.md](docs/DEM_DATASET.md) | Jotunheimen source, license, bake config, tile format, validation and regeneration |
 | [docs/TERRAIN_RESEARCH.md](docs/TERRAIN_RESEARCH.md) | Why plain fBM is bland and the composition this repo adopted: multi-noise channels, spline curves, domain warp, ridge spines |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | Repeatable headless QA, acceptance metrics, manual test pass |
 
@@ -110,10 +156,12 @@ or comparing screenshots.
 
 ```bash
 npm install
-npm run dev             # local dev server; open /infinite.html
+npm run dev             # local dev server; open /infinite.html or /dem.html
 npm run typecheck       # strict TypeScript check, no emit
 npm run build           # typecheck + static site in dist/
 npm run test:infinite   # Node-only tile/LOD/normal math checks
+npm run test:dem        # synthetic + checked-in DEM dataset checks
+npm run bake:dem -- --config tools/dem/jotunheimen.json  # re-bake the DEM
 ```
 
 The application source is TypeScript (`src/**/*.ts`); Vite strips types for
@@ -127,25 +175,32 @@ GitHub Pages via the Pages Actions flow. Deployments are serialized by the
 `pages` concurrency group, so the newest push deploys last.
 
 Live at:
-**https://mode777.github.io/normalmapped-terrain/infinite.html**
+
+- **https://mode777.github.io/normalmapped-terrain/infinite.html**
+- **https://mode777.github.io/normalmapped-terrain/dem.html**
 
 ## Repo map
 
 ```
-.github/workflows/deploy.yml  CI: unit checks, build, Pages deployment
+.github/workflows/deploy.yml  CI: unit/dataset checks, build, Pages deployment
 AGENTS.md            orientation for AI coding agents (repo map + invariants)
 openspec/            OpenSpec specs, active changes and archive
-infinite.html        the PoC entry page
+infinite.html        procedural infinite page
+dem.html             pre-baked Jotunheimen DEM page
 docs/INFINITE_TERRAIN_CONCEPT.md  clipmap/tile-cache concept + results
+docs/DEM_DATASET.md               Jotunheimen source, bake and validation
 docs/TERRAIN_RESEARCH.md          terrain-composition research + sources
 docs/VERIFICATION.md              headless QA recipe + acceptance metrics
+public/data/jotunheimen/          checked-in DEM manifest, tiles, coarse grid
 src/perlin.ts        seeded improved Perlin + fBM + ridged multifractal
 src/terrain-compose.ts  multi-noise/spline/warp terrain composition
 src/sky-shaders.ts   sky gradient + sun disc/halo shaders
 src/styles.css       shared UI chrome
-src/infinite/        heightfield worker, toroidal tiles, clipmaps, flight
-                     controller, infinite shaders/UI (all TypeScript)
-tools/               unit checks + headless QA drivers
+src/terrain/         shared renderer, tile cache/source contract, clipmap,
+                     shaders, origins, normals and UI
+src/infinite/        procedural source/worker, flight, page orchestration
+src/dem/             pre-baked source and DEM page orchestration
+tools/               bake/validation tools + headless QA drivers
 ```
 
 ## License

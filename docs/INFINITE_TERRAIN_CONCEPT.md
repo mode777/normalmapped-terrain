@@ -119,7 +119,7 @@ swim. A 2 m camera step is a whole cell for LOD 0 but `1/2^L` of a cell for
 ring `L`: every coarse vertex re-samples its height tile between texel
 centres and the surface visibly deforms as the camera moves.
 
-Instead each level snaps to **its own** spacing (`src/infinite/origins.ts`):
+Instead each level snaps to **its own** spacing (`src/terrain/origins.ts`):
 
 ```
 origin_L = round(camera.xz / S_L) * S_L

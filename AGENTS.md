@@ -4,12 +4,16 @@ Guidance for AI coding agents (and humans in a hurry) working in this repo.
 
 ## What this repo is
 
-One proof-of-concept renderer:
+Two proof-of-concept pages share one renderer:
 
 - **`infinite.html`** — camera-centred clipmap rings over an effectively
   infinite procedural world. Heights are displaced in the vertex shader;
   normals come from a toroidal per-LOD tile cache in `DataArrayTexture`s; the
   camera free-flies over the terrain.
+- **`dem.html`** — a checked-in Kartverket DTM 10 window of Jotunheimen,
+  rendered through the same `ClipmapRenderer` and `TileCache` with a
+  pre-baked `TileSource`, a bounded orbit camera and a finite-world edge
+  policy.
 
 Ship anything visual only after verifying it renders — see
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
@@ -18,17 +22,21 @@ Ship anything visual only after verifying it renders — see
 
 ```bash
 npm install
-npm run dev                     # vite dev server; open /infinite.html
+npm run dev                     # vite dev server; open /infinite.html or /dem.html
 npm run typecheck               # strict tsc for app + Node tools/config
 npm run build                   # typecheck + production build -> dist/
 
 npm run test:infinite           # Node-only math checks; one script, no per-test filter
+npm run test:dem                # synthetic + checked-in DEM dataset checks
+npm run bake:dem -- --config tools/dem/jotunheimen.json  # re-bake checked-in DEM
 npm run preview                 # serve dist/ on :4173 (build first)
 
 # headless QA (optional; see docs/VERIFICATION.md)
 npm install --no-save puppeteer-core
 node tools/screenshot-infinite.ts --url http://127.0.0.1:4173/infinite.html --out shots-infinite
 node tools/analyze-infinite.ts shots-infinite
+node tools/screenshot-dem.ts --url http://127.0.0.1:4173/dem.html --out shots-dem
+node tools/analyze-dem.ts shots-dem
 
 # OpenSpec
 openspec list                   # active changes; add --specs for current specs
@@ -52,7 +60,7 @@ may not be on `PATH`; the binary is at `~/.local/bin/openspec`.
 
 | Path | Purpose |
 |---|---|
-| `.github/workflows/deploy.yml` | Push-to-`main` CI: unit checks, build, GitHub Pages deployment |
+| `.github/workflows/deploy.yml` | Push-to-`main` CI: unit/dataset checks, build, GitHub Pages deployment |
 | `openspec/` | OpenSpec specs, active changes, archive, and `config.yaml` |
 | `.opencode/` | Generated OpenSpec skills + `/opsx-*` commands; do not hand-edit |
 | `tsconfig.json` | Strict TypeScript config for browser source (`src/`) |
@@ -61,22 +69,37 @@ may not be on `PATH`; the binary is at `~/.local/bin/openspec`.
 | `src/terrain-compose.ts` | Multi-noise channels, spline response curves, iterated domain warp, anisotropic ridge spines |
 | `src/sky-shaders.ts` | Sky gradient + sun disc/halo shaders |
 | `src/styles.css` | Shared UI chrome (panels, stats, sliders, loading overlay) |
-| `src/infinite/heightfield.ts` | Infinite seeded height function + per-tile float-Sobel normal baking |
-| `src/infinite/origins.ts` | Per-LOD clipmap origins: each level snaps to its own spacing |
+| `src/infinite/heightfield.ts` | Infinite seeded height function + per-tile `generateTile` |
 | `src/infinite/worker-protocol.ts` | Typed messages shared by the main thread and tile worker |
 | `src/infinite/terrain-worker.ts` | Worker wrapper around `generateTile` (transfers buffers) |
-| `src/infinite/tiles.ts` | Toroidal per-LOD tile cache, worker queue, `texSubImage3D` uploads |
-| `src/infinite/clipmap.ts` | Centre block, padded ring grids, parent-square trim, skirts |
-| `src/infinite/shaders.ts` | Clipmap vertex/fragment shaders + LOD/tile debug views |
+| `src/infinite/procedural-source.ts` | Worker-pool `TileSource` around the procedural generator |
 | `src/infinite/flight.ts` | Free-fly / auto-cruise camera in absolute world doubles |
-| `src/infinite/main.ts` | Infinite scene, floating origin, texture arrays, UI, stats |
-| `src/infinite/ui.ts` | DOM control wiring; `initUI(callbacks)` returns a setter API |
+| `src/infinite/main.ts` | Procedural page: floating origin, streamer, UI, stats |
 | `src/infinite/infinite.css` | Page-specific additions to `src/styles.css` |
-| `infinite.html` | The PoC entry page |
+| `src/terrain/tile-source.ts` | Shared `TerrainConfig`, `GeneratedTile`, `TileSource` contract |
+| `src/terrain/config.ts` | Derived cache, phase, origin-step and extent metrics |
+| `src/terrain/normals.ts` | Pure float-height Sobel normal baking |
+| `src/terrain/tile-cache.ts` | Toroidal per-LOD tile cache, async source queue, uploads |
+| `src/terrain/clipmap.ts` | Centre block, padded ring grids, parent-square trim, skirts |
+| `src/terrain/origins.ts` | Per-LOD clipmap origins: each level snaps to its own spacing |
+| `src/terrain/shaders.ts` | Clipmap vertex/fragment shaders + LOD/tile debug views |
+| `src/terrain/renderer.ts` | Shared texture-backed `ClipmapRenderer` |
+| `src/terrain/ui.ts` | DOM control wiring; `initUI(callbacks)` returns a setter API |
+| `src/dem/prebaked-source.ts` | Manifest/tile `TileSource`, coarse `heightAt`, edge clamp |
+| `src/dem/main.ts` | DEM page: manifest-driven config, bounded orbit, UI, stats |
+| `src/dem/dem.css` | DEM page additions to `src/styles.css` |
+| `infinite.html` | The procedural PoC entry page |
+| `dem.html` | The pre-baked Jotunheimen DEM entry page |
+| `public/data/jotunheimen/` | Checked-in manifest, height/normal tiles, coarse grid, preview |
 | `tools/test-infinite.ts` | Node-only tile/LOD/normal math checks |
+| `tools/bake-dem.ts` | Offline Kartverket WCS -> checked-in tile baker |
+| `tools/test-dem.ts` | Synthetic + checked-in DEM dataset validation |
+| `tools/dem/` | Bake source, grid/tile/normal helpers, manifest validator |
 | `tools/screenshot-infinite.ts` | Headless QA driver for `infinite.html` |
-| `tools/analyze-infinite.ts` | Pixel/console assertions for the screenshots |
-| `docs/` | INFINITE_TERRAIN_CONCEPT.md, TERRAIN_RESEARCH.md, VERIFICATION.md |
+| `tools/analyze-infinite.ts` | Pixel/console assertions for the infinite screenshots |
+| `tools/screenshot-dem.ts` | Headless QA driver for `dem.html` |
+| `tools/analyze-dem.ts` | Pixel/console assertions for the DEM screenshots |
+| `docs/` | INFINITE_TERRAIN_CONCEPT.md, DEM_DATASET.md, TERRAIN_RESEARCH.md, VERIFICATION.md |
 
 ## Critical invariants — breaking these silently ruins the render
 
@@ -114,6 +137,8 @@ may not be on `PATH`; the binary is at `~/.local/bin/openspec`.
    `uNormalTileCells = 512` for the normal UV. `T` in the UV formula is the
    *per-map* tile texel count, not always 64. This is the 8× resolution
    ratio (0.25 m normal texels vs 2 m mesh) that makes the detail visible.
+   The DEM page uses `normalScale = 2` (128² normal tiles, 512² layers) with
+   the same formula; do not hardcode 512/8 in shared code.
 9. **Every LOD snaps to its own spacing.** `snapLevelOrigins()` rounds each
    origin to a multiple of **its own** `S_L` (`origin_L = round(cam / S_L) *
    S_L`). A shared finest-level origin makes coarse vertices re-sample their
@@ -149,13 +174,17 @@ may not be on `PATH`; the binary is at `~/.local/bin/openspec`.
     origin; `uRenderOrigin` is `renderOrigin mod PHASE_WRAP` (largest cache
     world size). The camera stays in small render-space coordinates. Do not
     remove the modulo or long flights lose tile phase.
-16. **Clipmap constants:** `S0=2 m`, `C=24` cells, `LEVELS=10`, outer radius
+16. **Infinite clipmap constants:** `S0=2 m`, `C=24` cells, `LEVELS=10`, outer radius
     ≈49 km, height tile 64², normal tile 512², cache 4×4, `morphCells=3`.
     Ring `L` covers `[C·S_L, 2C·S_L]` = `[48·2^L, 96·2^L] m`; the last ring
     gets the only real skirt. Do not reduce `normalScale` without re-checking
     the detail-vs-mesh ratio. The normal cache is 2048² per layer (10 layers,
     ~160 MiB) — exactly the WebGL2 guaranteed minimum `MAX_TEXTURE_SIZE`, so
     `main.ts` throws rather than growing it.
+17. **DEM clipmap constants:** `S0=10 m`, `C=24` cells, `LEVELS=6`,
+    `normalScale=2`, outer radius 15.36 km over a 30.72 km checked-in window.
+    The manifest is the source of truth for the page config; do not hardcode
+    the dataset's spacing or normal scale in `dem.html` code.
 
 ## Conventions & practices
 
@@ -167,49 +196,60 @@ may not be on `PATH`; the binary is at `~/.local/bin/openspec`.
   imports break them. `tsconfig.json` type-checks `src/` with browser libs
   only, so Node globals cannot leak into app code. `tsconfig.node.json`
   type-checks the Node QA tools and `vite.config.ts`;
-  `tools/screenshot-infinite.ts` is excluded because `puppeteer-core` is an
-  optional install.
+  `tools/screenshot-infinite.ts` and `tools/screenshot-dem.ts` are excluded
+  because `puppeteer-core` is an optional install.
 - Runtime dependencies: `three` only. `typescript`, `@types/three`,
-  `@types/node`, `vite`/`pngjs` are devDependencies (`pngjs` is Node-only,
-  used by `tools/analyze-infinite.ts`). `puppeteer-core` stays an optional
-  `npm install --no-save` for the screenshot driver. Keep it that way unless
+  `@types/node`, `vite`, `pngjs`, `geotiff` and `proj4` are devDependencies.
+  `pngjs` is used by the analyzers and the bake tool; `geotiff`/`proj4` are
+  only used by the offline DEM bake. `puppeteer-core` stays an optional
+  `npm install --no-save` for the screenshot drivers. Keep it that way unless
   there's a strong reason.
 - Node ≥24 runs the `.ts` QA tools directly via native type stripping. Vite
   transpiles the app and worker; it does not type-check, so `npm run
   typecheck` (or `npm run build`) is the type gate.
 - Perf-relevant constants (noise-evaluation count per height sample in
-  `terrain-compose.ts` — ~36, and the infinite-page `S0`/`LEVELS`/`normalScale`)
-  were chosen to keep tile streaming hitch-free. Adding channels costs every
-  tile bake; profile before loosening them.
-- The tile generation **must stay in workers**; generating 64² height /
+  `terrain-compose.ts` — ~36, the infinite-page `S0`/`LEVELS`/`normalScale`,
+  and the DEM dataset's 10 m / 6 LOD / 2× normal configuration) were chosen to
+  keep tile streaming hitch-free. Adding channels costs every tile bake;
+  profile before loosening them. The checked-in DEM dataset is ~101 MB; the
+  2× normal PNGs dominate.
+- Procedural tile generation **must stay in workers**; generating 64² height /
   512² normal tiles on the main thread causes visible hitches at tile
-  crossings. The streamer uses up to 2 workers because the 8× normal bake is
-  ~7× the work of a 2× build. The 4×4 cache covers the visible 3×3 ring plus a
-  prefetch row/column; the normal cache costs ~160 MiB.
+  crossings. The procedural source uses up to 2 workers because the 8× normal
+  bake is ~7× the work of a 2× build. The pre-baked source fetches checked-in
+  tiles with a bounded in-flight queue instead. The 4×4 cache covers the
+  visible 3×3 ring plus a prefetch row/column; the infinite normal cache costs
+  ~160 MiB, the DEM one is much smaller (512² per layer).
 - The height function must stay a pure function of `(x, z)`; global passes
   (e.g. erosion simulation) would make streamed tiles disagree at their seams.
+- The checked-in DEM tiles are generated artifacts; change them by re-running
+  `npm run bake:dem -- --config tools/dem/jotunheimen.json`, not by hand.
+  `npm run test:dem` is the dataset gate; source GeoTIFFs stay out of git.
 - Commits: concise imperative subject lines, e.g. `Fix Sobel z-gradient sign`.
 - Deploy = push to `main`. GitHub Actions runs the unit checks, builds the
   site and publishes `dist/` with the Pages Actions flow. Pages is configured
   with source **GitHub Actions**, not a `gh-pages` branch. `vite.config.ts`
   sets `base: './'` for project-page paths — don't remove that.
-- Default CI runs `npm run test:infinite` and `npm run build` only; the build
-  script includes `tsc --noEmit`. The headless screenshot loop is a manual
-  visual-debugging tool; set `--chrome` or `CHROME_SHELL_PATH` (the built-in
-  default is from the original dev box) and use the SSH verification host in
-  `docs/VERIFICATION.md` when screenshots need to be compared.
+- Default CI runs `npm run test:infinite`, `npm run test:dem` and
+  `npm run build`; the build script includes `tsc --noEmit`. The headless
+  screenshot loops are manual visual-debugging tools; set `--chrome` or
+  `CHROME_SHELL_PATH` (the built-in default is from the original dev box) and
+  use the SSH verification host in `docs/VERIFICATION.md` when screenshots
+  need to be compared.
 - Never commit secrets. The verification recipe in `docs/VERIFICATION.md`
   intentionally references credentials only via environment variables.
 
 ## Where the tricky math lives
 
-- Sobel → world-space normal derivation: `src/infinite/heightfield.ts`.
+- Sobel → world-space normal derivation: `src/terrain/normals.ts`.
+- DEM bake local frame, per-LOD tile sampling and normal halos:
+  `tools/dem/grid.ts` + `docs/DEM_DATASET.md`.
 - Terrain composition (multi-noise channels, monotone-cubic spline response
   curves, contrast expansion, iterated domain warp, anisotropic ridge
   spines): `src/terrain-compose.ts` + `docs/TERRAIN_RESEARCH.md`.
 - Per-LOD snapping, padded rings, parent-square clip and morphs:
-  `src/infinite/origins.ts`, `src/infinite/clipmap.ts`,
-  `src/infinite/shaders.ts` + `docs/INFINITE_TERRAIN_CONCEPT.md`.
-- Toroidal cache and texture uploads: `src/infinite/tiles.ts`.
+  `src/terrain/origins.ts`, `src/terrain/clipmap.ts`,
+  `src/terrain/shaders.ts` + `docs/INFINITE_TERRAIN_CONCEPT.md`.
+- Toroidal cache and texture uploads: `src/terrain/tile-cache.ts`.
 - Floating origin and tile phase: `src/infinite/main.ts`,
   `src/infinite/flight.ts`.

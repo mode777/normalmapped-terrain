@@ -8,15 +8,15 @@ whether the scene actually renders.
 ## Default CI vs visual debugging
 
 On every push to `main`, `.github/workflows/deploy.yml` runs
-`npm run test:infinite` and `npm run build`, then deploys the built site to
-GitHub Pages. That is the default test suite: Node-only math checks plus a
-production build.
+`npm run test:infinite`, `npm run test:dem` and `npm run build`, then deploys
+the built site to GitHub Pages. That is the default test suite: Node-only math
+and dataset checks plus a production build.
 
 The headless screenshot loop below is deliberately **not** part of the
 deployment workflow. Run it locally, or on the SSH verification host, when you
 need to debug rendering or compare screenshots before/after a visual change.
 
-## The loop
+## Infinite page loop
 
 ```bash
 npm run test:infinite                        # Node-only tile/LOD/normal math
@@ -58,6 +58,52 @@ Reference values from the verified multi-noise terrain build (Nov 2026):
 2 workers, normal-map `hf=9.16` vs flat `hf=0.23`, zero upload errors,
 160 resident tiles after both 25 km and 500 km warps. The normal cache is
 2048 texels per side / ~160 MiB — the WebGL2 ceiling.
+
+## Pre-baked DEM page
+
+The Jotunheimen page uses the same renderer and tile cache with a checked-in
+dataset. Validate the data first; the screenshot loop only proves the scene
+renders.
+
+```bash
+npm run test:dem                              # synthetic + checked-in dataset checks
+npm run build && npx vite preview &           # serve dist/ on :4173
+npm install --no-save puppeteer-core          # once, next to the repo
+
+node tools/screenshot-dem.ts \
+  --url http://127.0.0.1:4173/dem.html --out shots-dem
+node tools/analyze-dem.ts shots-dem
+```
+
+`test:dem` is network-free. It checks the manifest and all 3,080 tile files,
+reconstructs the L0 height grid, verifies every LOD against it, checks the
+seam report, checks the coarse height grid, and rebakes a deterministic sample
+of normal tiles from the reconstructed heights. It is the gate for changes to
+the bake tool or dataset.
+
+`screenshot-dem.ts` waits for `window.__dem`, then captures the default view,
+flat normals, orbit movement, a warp, LOD/wireframe, tile grid, the magenta
+crack test, and a boundary view. `analyze-dem.ts` asserts:
+
+| Check | Meaning |
+|---|---|
+| no console/page errors | manifest, PNG decode, shaders and uploads succeeded |
+| terrain `std > 8` on every shot | not blank / blown out |
+| black-pixel fraction `< 8%` | no large holes or unlit massifs |
+| normal-map `hf > 1.05 ×` flat-normal `hf` | the 2× normal tiles contribute detail |
+| LOD debug `std > 20` | the ring-colour view is varied |
+| tile-grid `std > 20` | the checkerboard is visible |
+| `< 0.2 %` magenta in the crack shot | no gaps between clipmap rings |
+
+Reference values from the checked-in 2× dataset (Nov 2026): 3,080 tiles,
+~101 MB checked in, 58 resident after priming, 96 resident after a warp,
+102k triangles, 4 draw calls, zero upload errors, normal-map `hf=1.69` vs
+flat `hf=0.36`, and zero crack-test magenta. The 2× normal PNGs are ~24 KB
+each; see [DEM_DATASET.md](DEM_DATASET.md) for the source and bake details.
+
+The boundary shot (`08-boundary.png`) places the camera at the soft flight
+bound. The pre-baked source clamps out-of-range tile requests to the nearest
+edge tile, and the fog/last-ring skirt hide the finite world edge.
 
 ## Where to run the screenshot loop
 

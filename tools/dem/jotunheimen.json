@@ -1,0 +1,21 @@
+{
+  "dataset": "jotunheimen",
+  "source": {
+    "type": "kartverket-wcs",
+    "url": "https://wcs.geonorge.no/skwms1/wcs.hoyde-dtm-nhm-25833",
+    "coverage": "nhm_dtm_topo_25833",
+    "crs": "EPSG:25833",
+    "chunkPixels": 1536
+  },
+  "centerE": 145971,
+  "centerN": 6851843,
+  "sizeMeters": 30720,
+  "spacing": 10,
+  "heightScale": 2500,
+  "normalScale": 2,
+  "levels": 6,
+  "tileSize": 64,
+  "outputDir": "public/data/jotunheimen",
+  "license": "CC BY 4.0",
+  "attribution": "© Kartverket, Nasjonal høydemodell DTM 10, CC BY 4.0, modified (resampled, tiled, normals derived)."
+}

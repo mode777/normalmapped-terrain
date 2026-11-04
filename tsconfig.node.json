@@ -7,6 +7,10 @@
   "include": [
     "tools/test-infinite.ts",
     "tools/analyze-infinite.ts",
+    "tools/analyze-dem.ts",
+    "tools/test-dem.ts",
+    "tools/bake-dem.ts",
+    "tools/dem/**/*.ts",
     "vite.config.ts"
   ]
 }

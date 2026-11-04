@@ -9,6 +9,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         infinite: resolve(process.cwd(), 'infinite.html'),
+        dem: resolve(process.cwd(), 'dem.html'),
       },
     },
   },

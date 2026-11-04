@@ -10,12 +10,29 @@ import type * as THREE from 'three';
 
 const clamp = (v: number, a: number, b: number): number => Math.max(a, Math.min(b, v));
 
+export interface FlightView {
+  x: number;
+  z: number;
+  yaw: number;
+  pitch: number;
+  /** Metres above the terrain; defaults to 220. */
+  altitude?: number;
+}
+
 export interface FlightControllerOptions {
   camera: THREE.PerspectiveCamera;
   canvas: HTMLCanvasElement;
   heightAt: (x: number, z: number) => number;
   heightScale: number;
   initialSpeed?: number;
+  /** Soft circular bound for free flight and the orbit mode. */
+  boundsRadius?: number;
+  /** Orbit radius; defaults to 75% of boundsRadius. */
+  orbitRadius?: number;
+  cruiseMode?: 'wander' | 'orbit';
+  /** Metres above ground used by orbit mode; defaults to 180. */
+  cruiseAltitude?: number;
+  defaultView?: FlightView;
 }
 
 export interface FlightInfo {
@@ -34,6 +51,11 @@ export class FlightController {
   readonly canvas: HTMLCanvasElement;
   readonly heightAt: (x: number, z: number) => number;
   readonly heightScale: number;
+  readonly boundsRadius: number | null;
+  readonly orbitRadius: number;
+  readonly cruiseMode: 'wander' | 'orbit';
+  readonly cruiseAltitude: number;
+  readonly defaultView: FlightView | null;
 
   x = 0;
   z = 0;
@@ -43,6 +65,7 @@ export class FlightController {
   speed: number;
   autoCruise = true;
   cruiseTime = 0;
+  cruiseAngle = 0;
   paused = false;
   pointerLocked = false;
   keys = new Set<string>();
@@ -64,12 +87,28 @@ export class FlightController {
   private readonly _onPointerLockChange: () => void;
   private readonly _onWheel: (e: WheelEvent) => void;
 
-  constructor({ camera, canvas, heightAt, heightScale, initialSpeed = 80 }: FlightControllerOptions) {
+  constructor({
+    camera,
+    canvas,
+    heightAt,
+    heightScale,
+    initialSpeed = 80,
+    boundsRadius,
+    orbitRadius,
+    cruiseMode = 'wander',
+    cruiseAltitude = 180,
+    defaultView,
+  }: FlightControllerOptions) {
     this.camera = camera;
     this.canvas = canvas;
     this.heightAt = heightAt;
     this.heightScale = heightScale;
     this.speed = initialSpeed;
+    this.boundsRadius = boundsRadius ?? null;
+    this.orbitRadius = orbitRadius ?? (boundsRadius !== undefined ? boundsRadius * 0.75 : 0);
+    this.cruiseMode = cruiseMode;
+    this.cruiseAltitude = cruiseAltitude;
+    this.defaultView = defaultView ?? null;
 
     this._onKeyDown = (e) => this._handleKey(e, true);
     this._onKeyUp = (e) => this._handleKey(e, false);
@@ -172,6 +211,7 @@ export class FlightController {
     this.autoCruise = on;
     if (on) {
       this.cruiseTime = 0;
+      this.cruiseAngle = Math.atan2(this.z, this.x);
       this.onAutoCruiseChange?.(true);
     }
   }
@@ -190,12 +230,14 @@ export class FlightController {
   }
 
   reset(): void {
-    this.x = 0;
-    this.z = 0;
-    this.yaw = 0.35;
-    this.pitch = -0.08;
-    this.y = this.groundHeight() + 220;
+    const view = this.defaultView;
+    this.x = view?.x ?? 0;
+    this.z = view?.z ?? 0;
+    this.yaw = view?.yaw ?? 0.35;
+    this.pitch = view?.pitch ?? -0.08;
+    this.y = this.groundHeight() + (view?.altitude ?? 220);
     this.cruiseTime = 0;
+    this.cruiseAngle = Math.atan2(this.z, this.x);
   }
 
   warpTo(x: number, z: number, y: number | null = null): void {
@@ -203,6 +245,7 @@ export class FlightController {
     this.z = z;
     this.y = y === null ? this.groundHeight() + 220 : y;
     this.cruiseTime = 0;
+    this.cruiseAngle = Math.atan2(this.z, this.x);
   }
 
   update(dt: number): void {
@@ -213,18 +256,30 @@ export class FlightController {
 
     if (this.autoCruise) {
       this.cruiseTime += dt;
-      const targetYaw = 0.30 + Math.sin(this.cruiseTime * 0.035) * 0.55;
-      this.yaw += (targetYaw - this.yaw) * Math.min(1, dt * 0.35);
-      this.pitch += (-0.10 - this.pitch) * Math.min(1, dt * 0.6);
-
-      const fwdX = -Math.sin(this.yaw);
-      const fwdZ = -Math.cos(this.yaw);
       const cruiseSpeed = 70 * (this.speed / 80);
-      this.x += fwdX * cruiseSpeed * dt;
-      this.z += fwdZ * cruiseSpeed * dt;
+      if (this.cruiseMode === 'orbit' && this.orbitRadius > 0) {
+        this.cruiseAngle += cruiseSpeed * dt / this.orbitRadius;
+        this.x = Math.cos(this.cruiseAngle) * this.orbitRadius;
+        this.z = Math.sin(this.cruiseAngle) * this.orbitRadius;
+        // Look inward at the massif while moving around it.
+        const targetYaw = Math.PI / 2 - this.cruiseAngle;
+        this.yaw += (targetYaw - this.yaw) * Math.min(1, dt * 1.5);
+        this.pitch += (-0.18 - this.pitch) * Math.min(1, dt * 0.8);
+        const targetY = ground + this.cruiseAltitude;
+        this.y += (targetY - this.y) * Math.min(1, dt * 0.7);
+      } else {
+        const targetYaw = 0.30 + Math.sin(this.cruiseTime * 0.035) * 0.55;
+        this.yaw += (targetYaw - this.yaw) * Math.min(1, dt * 0.35);
+        this.pitch += (-0.10 - this.pitch) * Math.min(1, dt * 0.6);
 
-      const targetY = ground + 180;
-      this.y += (targetY - this.y) * Math.min(1, dt * 0.7);
+        const fwdX = -Math.sin(this.yaw);
+        const fwdZ = -Math.cos(this.yaw);
+        this.x += fwdX * cruiseSpeed * dt;
+        this.z += fwdZ * cruiseSpeed * dt;
+
+        const targetY = ground + this.cruiseAltitude;
+        this.y += (targetY - this.y) * Math.min(1, dt * 0.7);
+      }
     } else {
       const cosPitch = Math.cos(this.pitch);
       const fwdX = -Math.sin(this.yaw) * cosPitch;
@@ -247,6 +302,15 @@ export class FlightController {
         this.x += mx * step;
         this.z += mz * step;
         this.y += my * step;
+      }
+    }
+
+    if (this.boundsRadius !== null) {
+      const radius = Math.hypot(this.x, this.z);
+      if (radius > this.boundsRadius) {
+        const scale = this.boundsRadius / radius;
+        this.x *= scale;
+        this.z *= scale;
       }
     }
 

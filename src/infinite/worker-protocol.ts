@@ -1,13 +1,21 @@
 /**
- * Typed message protocol between the main thread and terrain tiles workers.
+ * Typed message protocol between the main thread and procedural tile workers.
  *
- * Transferables are listed explicitly on the responses so the worker can
- * hand off tile buffers without cloning.
+ * Transferables are listed explicitly on the responses so the worker can hand
+ * off tile buffers without cloning.
  */
+
+export interface WorkerTileConfig {
+  baseSpacing: number;
+  tileSize: number;
+  heightScale: number;
+  normalScale: number;
+}
 
 export interface InitRequest {
   type: 'init';
   seed: number;
+  config: WorkerTileConfig;
 }
 
 export interface TileRequest {
@@ -16,10 +24,6 @@ export interface TileRequest {
   level: number;
   tx: number;
   ty: number;
-  tileSize: number;
-  baseSpacing: number;
-  heightScale: number;
-  normalScale: number;
 }
 
 export type TerrainWorkerRequest = InitRequest | TileRequest;

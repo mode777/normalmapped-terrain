@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jotunheimen — Pre-baked DEM</title>
+  <meta name="description" content="A checked-in Kartverket DTM 10 heightfield rendered by the same clipmap and normal-map tile cache as the procedural infinite terrain." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏔️</text></svg>" />
+  <link rel="stylesheet" href="./src/styles.css" />
+  <link rel="stylesheet" href="./src/dem/dem.css" />
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="loading" class="overlay">
+    <div class="loading-card">
+      <h1>Jotunheimen</h1>
+      <p class="sub">pre-baked DEM · clipmap rings · normal maps</p>
+      <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+      <p id="loading-status">Loading dataset…</p>
+    </div>
+  </div>
+
+  <header id="title-card" class="glass hidden">
+    <h1>Jotunheimen</h1>
+    <p class="pipeline">
+      pre-baked tiles <span class="arrow">→</span> clipmap rings <span class="arrow">→</span> normal maps
+    </p>
+    <p class="tagline">30.72 km of real terrain. 10 m Kartverket DTM, 2× normal tiles, same renderer as the procedural infinite world.</p>
+    <a class="dataset-link" href="./infinite.html">← procedural infinite terrain</a>
+  </header>
+
+  <div id="stats" class="glass chip hidden">
+    <span><b id="stat-fps">–</b> fps</span>
+    <span class="dot"></span>
+    <span><b id="stat-tris">–</b> tris</span>
+    <span class="dot"></span>
+    <span><b id="stat-calls">–</b> calls</span>
+    <span class="dot"></span>
+    <span><b id="stat-alt">–</b> alt</span>
+    <span class="dot"></span>
+    <span><b id="stat-speed">–</b> m/s</span>
+    <span class="dot"></span>
+    <span><b id="stat-tiles">–</b> tiles</span>
+    <span class="dot"></span>
+    <span><b id="stat-queue">0</b> queued</span>
+    <span class="dot"></span>
+    <span><b id="stat-pos">–</b></span>
+  </div>
+
+  <div id="flight-hint" class="glass chip hidden">
+    <b>Click</b> to capture mouse · <b>WASD</b> fly · <b>Q/E</b> down/up · <b>Shift</b> boost · wheel speed
+  </div>
+  <div id="pointer-hint" class="glass chip hidden">Click the scene to fly</div>
+
+  <aside id="panel" class="glass hidden">
+    <div class="panel-head">
+      <h2>Controls</h2>
+      <button id="panel-toggle" title="collapse">–</button>
+    </div>
+    <div class="panel-body">
+      <section>
+        <h3>Flight</h3>
+        <label class="check-row"><input type="checkbox" id="auto-cruise" checked /> Auto-cruise orbit</label>
+        <label class="slider-row">Speed <input type="range" id="cruise-speed" min="20" max="300" value="60" step="5" /><span id="cruise-speed-val">60 m/s</span></label>
+        <button id="reset-flight" class="wide-btn">Reset position</button>
+        <p id="tile-status" class="info">tiles: warming up</p>
+      </section>
+
+      <section>
+        <h3>Sun</h3>
+        <label class="slider-row">Azimuth <input type="range" id="sun-azimuth" min="0" max="360" value="305" step="1" /><span id="sun-azimuth-val">305°</span></label>
+        <label class="slider-row">Elevation <input type="range" id="sun-elevation" min="6" max="85" value="34" step="1" /><span id="sun-elevation-val">34°</span></label>
+      </section>
+
+      <section>
+        <h3>Terrain</h3>
+        <label class="slider-row">Normal strength <input type="range" id="normal-strength" min="0" max="2.5" value="1" step="0.05" /><span id="normal-strength-val">1.00×</span></label>
+        <label class="check-row"><input type="checkbox" id="wireframe" /> Wireframe</label>
+        <label class="check-row"><input type="checkbox" id="lod-debug" /> Show LOD levels</label>
+        <label class="check-row"><input type="checkbox" id="tile-debug" /> Show tile grid</label>
+        <p class="info">mesh 10 m · normal map 5 m (2×)</p>
+      </section>
+
+      <section class="credits">
+        <p>Kartverket Nasjonal høydemodell DTM 10, 30.72 × 30.72 km around Jotunheimen. Heights and normals are baked offline into a 4×4-tile toroidal cache per LOD.</p>
+        <p class="attribution">© Kartverket, Nasjonal høydemodell DTM 10, CC BY 4.0, modified (resampled, tiled, normals derived).</p>
+      </section>
+    </div>
+  </aside>
+
+  <footer id="footnote" class="hidden">
+    <b>Kartverket DTM 10</b> · CC BY 4.0 · pre-baked height + normal tiles · <a href="./infinite.html">procedural version</a>
+  </footer>
+
+  <script type="module" src="./src/dem/main.ts"></script>
+</body>
+</html>

@@ -1,13 +1,17 @@
 /**
  * Terrain tile worker.
  *
- * Owns the procedural height function and bakes float-Sobel normal tiles
- * off the main thread. Tile results are transferred as ArrayBuffers.
+ * Owns the procedural height function and bakes float-Sobel normal tiles off
+ * the main thread. Tile results are transferred as ArrayBuffers.
  */
 
 import { makeHeightField, generateTile } from './heightfield.ts';
 import type { HeightField } from './heightfield.ts';
-import type { TerrainWorkerRequest, TerrainWorkerResponse } from './worker-protocol.ts';
+import type {
+  TerrainWorkerRequest,
+  TerrainWorkerResponse,
+  WorkerTileConfig,
+} from './worker-protocol.ts';
 
 // The app tsconfig includes the DOM lib, so `self` is typed as a Window.
 // Narrow it to the small surface this module actually uses.
@@ -18,18 +22,20 @@ interface WorkerScope {
 
 const scope = self as unknown as WorkerScope;
 let heightField: HeightField | null = null;
+let config: WorkerTileConfig | null = null;
 
 scope.onmessage = (event) => {
   const msg = event.data;
 
   if (msg.type === 'init') {
     heightField = makeHeightField(msg.seed);
+    config = msg.config;
     scope.postMessage({ type: 'ready', seed: msg.seed });
     return;
   }
 
   if (msg.type === 'tile') {
-    if (!heightField) {
+    if (!heightField || !config) {
       scope.postMessage({ type: 'error', id: msg.id, message: 'worker not initialized' });
       return;
     }
@@ -39,10 +45,7 @@ scope.onmessage = (event) => {
         level: msg.level,
         tx: msg.tx,
         ty: msg.ty,
-        tileSize: msg.tileSize,
-        baseSpacing: msg.baseSpacing,
-        heightScale: msg.heightScale,
-        normalScale: msg.normalScale,
+        ...config,
       });
 
       const heightsBuffer = heights.buffer as ArrayBuffer;

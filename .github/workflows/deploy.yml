@@ -34,6 +34,9 @@ jobs:
       - name: Run unit checks
         run: npm run test:infinite
 
+      - name: Validate DEM dataset
+        run: npm run test:dem
+
       - name: Build site
         run: npm run build
 
