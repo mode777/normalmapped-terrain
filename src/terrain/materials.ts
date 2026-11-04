@@ -19,6 +19,7 @@ export interface MaterialManifestEntry {
   biome: string;
   role: string;
   tileMeters: number;
+  textureScale?: number;
   projection: MaterialProjection;
   normalStrength: number;
   roughness: number;
@@ -93,6 +94,9 @@ function validateManifest(manifest: MaterialManifest): void {
       throw new Error(`material ${entry.id} is missing a packed texture path`);
     }
     if (!(entry.tileMeters > 0)) throw new Error(`material ${entry.id} has an invalid tile size`);
+    if (entry.textureScale !== undefined && !(entry.textureScale > 0)) {
+      throw new Error(`material ${entry.id} has an invalid texture scale`);
+    }
     if (!(entry.slopeScale > 0)) throw new Error(`material ${entry.id} has an invalid slope scale`);
     if (entry.projection !== 'planar' && entry.projection !== 'triplanar') {
       throw new Error(`material ${entry.id} has an invalid projection`);

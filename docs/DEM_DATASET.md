@@ -191,8 +191,9 @@ window, so the weights cross-fade without an ID-set change.
 
 Weights come from the 10 m L0 grid:
 
-- **Snow:** high normalized height, reduced on steep slopes, boosted on
-  north-facing slopes (`-N.z`).
+- **Snow:** high normalized height (start 0.85), with a sharp ~100 m
+  elevation band, reduced on steep slopes, boosted on north-facing slopes
+  (`-N.z`).
 - **Grass / Aerial Grass Rock:** low, gentle, concave ground plus seeded
   ~4.2 km random patches over the low-steepness rocky areas.
 - **Rocky Terrain 02:** the low/moderate-steepness base.
@@ -233,7 +234,7 @@ the checked-in dataset:
 Reference values for the checked-in 2× dataset: 3,080 tiles, 128×128 normal
 tiles, max seam error 1, 18 normal tiles rebaked during validation, a 2048²
 material stack and 1024² macro, stack weight means
-`0.779 / 0.010 / 0.014 / 0.197` (rocky/cliff/snow/grass), and ~107.5 MB
+`0.794 / 0.010 / 0.008 / 0.189` (rocky/cliff/snow/grass), and ~107.5 MB
 including heights, normals, coarse grid, preview, stack and macro. The packed
 material library is a separate ~33.5 MB under `public/materials/`.
 

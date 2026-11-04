@@ -46,6 +46,7 @@ interface SourceMaterial {
   biome: string;
   role: string;
   tileMeters: number;
+  textureScale?: number;
   projection: Projection;
   normalStrength: number;
   roughness: number;
@@ -375,12 +376,15 @@ async function packMaterial(
 
 function outputEntry(packed: PackedMaterial, size: number): Record<string, unknown> {
   const { entry, resolved } = packed;
+  const textureScale = entry.textureScale ?? 1;
+  if (!(textureScale > 0)) throw new Error(`${entry.id}: textureScale must be positive`);
   return {
     id: entry.id,
     name: entry.name,
     biome: entry.biome,
     role: entry.role,
     tileMeters: entry.tileMeters,
+    textureScale,
     projection: entry.projection,
     normalStrength: entry.normalStrength,
     roughness: entry.roughness,
@@ -478,6 +482,11 @@ async function checkManifest(): Promise<void> {
     const tile = asset.dimensions ? asset.dimensions[0] / 1000 : NaN;
     if (!Number.isFinite(tile) || Math.abs(tile - entry.tileMeters) > 0.06) {
       process.stderr.write(`FAIL ${entry.id}: tile ${tile} m, expected ${entry.tileMeters} m\n`);
+      failures++;
+      continue;
+    }
+    if (entry.textureScale !== undefined && !(entry.textureScale > 0)) {
+      process.stderr.write(`FAIL ${entry.id}: textureScale must be positive\n`);
       failures++;
       continue;
     }

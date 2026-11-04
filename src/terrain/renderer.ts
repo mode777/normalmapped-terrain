@@ -237,7 +237,12 @@ export class ClipmapRenderer {
     this.materialParamsA = Array.from({ length: 24 }, (_, i) => {
       const entry = entries[i];
       return entry
-        ? new THREE.Vector4(entry.tileMeters, entry.slopeScale, entry.normalStrength, entry.roughness)
+        ? new THREE.Vector4(
+          entry.tileMeters * (entry.textureScale ?? 1),
+          entry.slopeScale,
+          entry.normalStrength,
+          entry.roughness,
+        )
         : new THREE.Vector4(1, 1, 0, 1);
     });
     this.materialParamsB = Array.from({ length: 24 }, (_, i) => {
@@ -572,7 +577,7 @@ export class ClipmapRenderer {
       const materialScale = this.terrainUniforms.uMaterialScale.value;
       for (let i = 0; i < this.materialLibrary.count; i++) {
         const entry = this.materialLibrary.entries[i];
-        const tile = entry.tileMeters * materialScale;
+        const tile = entry.tileMeters * (entry.textureScale ?? 1) * materialScale;
         this.materialUvOffset[i]?.set(
           wrapPhase(renderOrigin.x, tile),
           wrapPhase(renderOrigin.y, tile),

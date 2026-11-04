@@ -51,13 +51,16 @@ slope space, so there is no TBN.
 Each entry in `manifest.json` contains:
 
 ```text
-id, name, biome, role, tileMeters, projection
+id, name, biome, role, tileMeters, textureScale, projection
 normalStrength, roughness, specular, slopeScale, averageColor
 albedoHeight, slopeRough, hashes, source { id, resolution, maps, hashes }
 ```
 
 - `tileMeters` is Poly Haven's physical texture size (`dimensions / 1000`), used
-  as the default world UV scale.
+  as the base world UV scale. `textureScale` is a per-material multiplier:
+  `rocky_terrain_02` 0.25, `aerial_grass_rock` 0.5, `snow_field_aerial` 0.25,
+  `aerial_beach_01` 0.25; the rest default to 1.0. The global panel slider
+  multiplies all of them.
 - `projection` is `planar` for most materials and `triplanar` for cliff/mossy
   rock.
 - `averageColor` is the sRGB mean of the albedo; the DEM macro map uses it.

@@ -31,6 +31,7 @@ interface MaterialEntry {
   biome: string;
   role: string;
   tileMeters: number;
+  textureScale?: number;
   projection: 'planar' | 'triplanar';
   normalStrength: number;
   roughness: number;
@@ -89,6 +90,10 @@ function validate(root: string, manifestPath: string): string[] {
     if (!entry.role) errors.push(`${prefix}: missing role`);
     if (!isFiniteNumber(entry.tileMeters) || entry.tileMeters < 0.5 || entry.tileMeters > 100) {
       errors.push(`${prefix}: tileMeters ${String(entry.tileMeters)} outside 0.5..100`);
+    }
+    if (entry.textureScale !== undefined
+      && (!isFiniteNumber(entry.textureScale) || entry.textureScale <= 0)) {
+      errors.push(`${prefix}: textureScale invalid`);
     }
     if (entry.projection !== 'planar' && entry.projection !== 'triplanar') {
       errors.push(`${prefix}: projection ${String(entry.projection)}`);

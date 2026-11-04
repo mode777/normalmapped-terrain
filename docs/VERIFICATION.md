@@ -188,9 +188,10 @@ slice: `rocky_terrain_02`, `rock_face_03`, `snow_02`, `aerial_grass_rock`. The
 stack is 2048² over the 30.72 km window; the macro albedo is 1024². Material
 textures are 512² arrays with mips/anisotropy. The panel's **Texture scale**
 slider multiplies the material world tile (default 32×; range 1–64×); the
-world-lock offset uses the same scaled tile. The material-off path preserves
-the old height/slope palette; the infinite page does not load materials in
-this change.
+world-lock offset uses the same scaled tile. Aerial materials also carry a
+smaller per-material `textureScale` factor in the packed manifest. The
+material-off path preserves the old height/slope palette; the infinite page
+does not load materials in this change.
 
 `puppeteer` runs at roughly 1 fps on SwiftShader with the material shader; the
 headless pass proves the pipeline, not real-GPU performance. A real-GPU

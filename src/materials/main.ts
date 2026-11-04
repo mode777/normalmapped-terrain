@@ -15,6 +15,7 @@ interface SwatchMaterial {
   biome: string;
   role: string;
   tileMeters: number;
+  textureScale?: number;
   slopeScale: number;
   albedoHeight: string;
   slopeRough: string;
@@ -99,7 +100,8 @@ function addSwatch(container: HTMLElement, entry: SwatchMaterial, image: ImageDa
   const name = document.createElement('b');
   name.textContent = entry.name;
   const meta = document.createElement('span');
-  meta.textContent = `${entry.role} · ${entry.tileMeters.toFixed(1)} m`;
+  const scale = entry.textureScale ?? 1;
+  meta.textContent = `${entry.role} · ${entry.tileMeters.toFixed(1)} m × ${scale.toFixed(2)}`;
   caption.append(name, meta);
   figure.append(canvas, caption);
   container.append(figure);

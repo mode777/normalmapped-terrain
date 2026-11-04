@@ -66,7 +66,8 @@ export interface MaterialStackResult {
   stats: MaterialStackStats;
 }
 
-const SNOW_START = 0.84;
+const SNOW_START = 0.85;
+const SNOW_BAND = 0.04;
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 const smoothstep = (a: number, b: number, x: number): number => {
   const t = clamp01((x - a) / (b - a));
@@ -150,19 +151,19 @@ export function weightsAt(
   // Rock Face only on genuinely steep faces; rocky terrain owns the rest.
   const cliffFactor = clamp01(smoothstep(0.30, 0.60, sample.slope));
 
-  let snow = smoothstep(SNOW_START, SNOW_START + 0.14, sample.height * 1.06)
+  let snow = smoothstep(SNOW_START, SNOW_START + SNOW_BAND, sample.height)
     * (1 - 0.7 * smoothstep(0.30, 0.62, sample.slope))
     * (0.55 + 0.45 * sample.north)
     * (0.82 + 0.18 * ridgeNoise);
   snow *= 1 - 0.25 * sample.ridge;
   snow = clamp01(snow);
 
-  const lowGrass = (1 - smoothstep(0.42, 0.60, sample.height))
+  const lowGrass = (1 - smoothstep(0.46, 0.54, sample.height))
     * (0.55 + 0.45 * bandNoise)
     * (1 - 0.85 * smoothstep(0.26, 0.55, sample.slope))
     * (0.65 + 0.35 * sample.concavity)
     * (1 - 0.45 * sample.ridge);
-  const altitudeGrass = 1 - smoothstep(0.72, 0.90, sample.height);
+  const altitudeGrass = 1 - smoothstep(0.76, 0.84, sample.height);
   const patch = smoothstep(0.55, 0.82, patchNoise)
     * 0.45
     * (1 - cliffFactor)

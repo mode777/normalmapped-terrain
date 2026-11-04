@@ -17,11 +17,25 @@ changes.
     A ambient occlusion.
 - **Layers:** two `DataArrayTexture`s, one layer per material, with mips and
   anisotropy. Albedo is sampled as sRGB; slope/rough/ao is linear.
-- **Physical scale:** `tileMeters` is Poly Haven's `dimensions / 1000`. The
-  renderer applies a global `textureScale` multiplier to it (default **32×**,
-  panel slider 1–64×), so the packed textures read at a larger world scale
-  without re-packing. The shader divides by `tileMeters * textureScale`; the
-  world-lock offset uses the same scaled tile.
+- **Physical scale:** `tileMeters` is Poly Haven's `dimensions / 1000`.
+  Each material also has a packed `textureScale` factor; the shader divides
+  by `tileMeters * materialTextureScale * globalTextureScale`. The global
+  texture scale is **32×** by default (panel slider 1–64×). Aerial materials
+  use smaller per-material factors so they stay at a sensible macro scale
+  while the close-up materials get the full 32×.
+
+| Material | tileMeters | textureScale | effective at 32× |
+|---|---:|---:|---:|
+| `rocky_terrain_02` | 90 | 0.25 | 720 m |
+| `aerial_grass_rock` | 15 | 0.5 | 240 m |
+| `rock_face_03` | 2.7 | 1.0 | 86.4 m |
+| `snow_02` | 2.0 | 1.0 | 64 m |
+| `snow_field_aerial` | 80 | 0.25 | 640 m |
+| `aerial_beach_01` | 30 | 0.25 | 240 m |
+
+The other library materials default to `textureScale = 1`. Edit the values in
+`tools/materials/polyhaven.json` and run `npm run bake:materials` to refresh
+the packed manifest. The global panel slider still multiplies all materials.
 - **Slope encoding:** the shader decodes `s = (rg * 2 - 1) * slopeScale`; the
   per-material `slopeScale` prevents clipping steep gradients. Poly Haven's
   `nor_dx` (green-down) is converted to the repo's V = +z frame during packing.
@@ -57,8 +71,9 @@ macro-albedo.png   1024^2 RGBA8   low-frequency far-field albedo
 
 The bake derives weights from the 10 m L0 height grid:
 
-- **Snow:** high normalized height (start 0.84, ~2100 m), reduced on steep
-  slopes, boosted on north-facing slopes (`-N.z`).
+- **Snow:** high normalized height (start 0.85, ~2125 m), with a sharp
+  ~100 m elevation band, reduced on steep slopes, boosted on north-facing
+  slopes (`-N.z`).
 - **Grass / Aerial Grass Rock:** low, gentle, concave ground plus seeded
   ~4.2 km random patches over the low-steepness rocky areas.
 - **Rocky Terrain 02:** the low/moderate-steepness base.
@@ -68,7 +83,7 @@ The bake derives weights from the 10 m L0 height grid:
 
 Convexity/concavity from the height-grid Laplacian and seeded low-frequency
 value noise are secondary inputs. The current window's mean weights are
-`0.779 / 0.010 / 0.014 / 0.197` (rocky/cliff/snow/grass); the stack has
+`0.794 / 0.010 / 0.008 / 0.189` (rocky/cliff/snow/grass); the stack has
 non-degenerate ranges for all four.
 
 ## Shader composition
@@ -146,6 +161,10 @@ the checked-in files (IDs, weight sums, ranges, dimensions and hashes) without
 network access.
 
 ## Measured results and limitations
+
+**Note:** the numbers below were captured before the per-material scale and
+the rocky/aerial-grass rebalance. Re-run the headless QA after visual sign-off;
+the current stack has not been re-measured.
 
 From the Nov 2026 headless pass (SwiftShader, 1600×900):
 

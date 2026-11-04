@@ -92,7 +92,8 @@ Poly Haven library and a baked four-slot distribution:
 - **20 materials** (24 cap), packed as 512² RGBA8 albedo+height and
   slope+roughness+AO arrays. Physical tile sizes come from Poly Haven's
   recorded dimensions; the renderer applies a 32× world tile scale by default
-  (panel slider 1–64×).
+  (panel slider 1–64×). Aerial materials carry smaller per-material factors
+  (0.25–0.5) so they stay macro-scale while the close-up materials use 1×.
 - **Baked stack** — a 2048² map of four material IDs and four normalized
   weights over the 30.72 km window, plus a 1024² macro albedo for the far
   field. The weight rules are steepness-driven: Rocky Terrain 02 owns the low
@@ -126,7 +127,7 @@ instead of the unbounded wander.
 | Panel → Materials → Mode | material on / off / debug weight view |
 | Height blend | bias material boundaries by the packed height |
 | Material normals | scale the material slope contribution |
-| Texture scale | world tile multiplier; default 32×, slider 1–64× |
+| Texture scale | global world tile multiplier; default 32×, slider 1–64×; per-material factors in the manifest |
 
 ## Verification
 
