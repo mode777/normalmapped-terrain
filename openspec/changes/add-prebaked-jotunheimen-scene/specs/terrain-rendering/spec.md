@@ -37,6 +37,27 @@ The renderer SHALL use two 2D array textures with one layer per LOD. Height laye
 - **THEN** it SHALL decode `R = N.x`, `G = N.z`, `B = N.y`
 - **AND** it SHALL light the fragment without a per-fragment TBN matrix
 
+### Requirement: Normal LOD bias
+
+The fragment shader SHALL support a normal LOD bias that samples a finer normal array layer than the geometric LOD. At bias 1 it SHALL sample layer `max(level - 1, 0)`, and any boundary cross-fade SHALL match the biased layer used by the adjacent ring.
+
+#### Scenario: Bias sharpens distant normals
+
+- **WHEN** the normal LOD bias is 1
+- **THEN** each ring SHALL sample the next-finer normal layer
+- **AND** level 0 SHALL remain clamped to layer 0
+
+#### Scenario: Bias 0 preserves geometric-layer sampling
+
+- **WHEN** the normal LOD bias is 0
+- **THEN** each ring SHALL sample its own normal layer
+
+#### Scenario: Biased boundaries stay continuous
+
+- **WHEN** adjacent rings meet at a clipmap boundary with bias 1
+- **THEN** the outer ring's cross-fade target SHALL match the inner ring's biased normal layer
+- **AND** no normal-magnitude seam SHALL appear at the boundary
+
 ### Requirement: Toroidal cache addressing
 
 The tile cache SHALL map world tile `(tx, ty)` to slot `(tx mod K, ty mod K)` and SHALL NOT shift texture contents when the camera moves. The shader SHALL reproduce the mapping from the render origin, reduced modulo the largest cache world size.

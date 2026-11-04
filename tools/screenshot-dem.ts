@@ -129,9 +129,11 @@ await page.evaluate(() => {
 await shot('07-cracks');
 await page.evaluate(() => window.__dem.setCrackDebug(false));
 
-// Boundary view: the source clamps to the nearest edge tile.
-await page.evaluate(async () => { await window.__dem.warpTo(3000, 0); });
+// Boundary view: free flight is not clamped; the source clamps to the nearest
+// edge tile instead.
+await page.evaluate(async () => { await window.__dem.warpTo(6000, 0); });
 await sleep(1000);
+console.log('stats boundary:', JSON.stringify(await read()));
 await shot('08-boundary');
 
 writeFileSync(`${OUT}/console.json`, JSON.stringify({ errors, messages }, null, 2));

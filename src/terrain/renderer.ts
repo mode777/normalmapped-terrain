@@ -38,6 +38,7 @@ type TerrainUniforms = {
   uMorphCells: THREE.IUniform<number>;
   uPixelScale: THREE.IUniform<number>;
   uNormalStrength: THREE.IUniform<number>;
+  uNormalLodBias: THREE.IUniform<number>;
   uSunDirection: THREE.IUniform<THREE.Vector3>;
   uSunColor: THREE.IUniform<THREE.Color>;
   uSkyColor: THREE.IUniform<THREE.Color>;
@@ -119,6 +120,9 @@ export class ClipmapRenderer {
       uMorphCells: { value: config.morphCells },
       uPixelScale: { value: 0.001 },
       uNormalStrength: { value: 1 },
+      // Default to the geometric layer; the DEM scene opts into one finer
+      // layer, where the 4x4 cache covers the whole coarse ring.
+      uNormalLodBias: { value: 0 },
       uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
       uSunColor: { value: new THREE.Color(1, 0.97, 0.9) },
       uSkyColor: { value: new THREE.Color(0.20, 0.42, 0.72) },
@@ -322,6 +326,11 @@ export class ClipmapRenderer {
 
   setNormalStrength(strength: number): void {
     this.terrainUniforms.uNormalStrength.value = strength;
+  }
+
+  /** Negative normal LOD bias; 1 samples the next-finer normal layer. */
+  setNormalLodBias(bias: number): void {
+    this.terrainUniforms.uNormalLodBias.value = Math.max(0, Math.min(3, bias));
   }
 
   setFogDensity(density: number): void {

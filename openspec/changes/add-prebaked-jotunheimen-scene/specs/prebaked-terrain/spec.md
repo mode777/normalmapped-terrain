@@ -76,13 +76,14 @@ Height tiles SHALL be stored as 64×64 little-endian `uint16` normalized heights
 
 ### Requirement: Finite-world edge policy
 
-The pre-baked scene SHALL define what happens beyond the dataset bounds. Out-of-range tile requests SHALL be clamped to the nearest available tile or resolved to a defined edge tile, and the scene SHALL bound the camera or use fog so the dataset edge does not read as a hole or an abrupt cliff.
+The pre-baked scene SHALL define what happens beyond the dataset bounds. Out-of-range tile requests SHALL be clamped to the nearest available tile or resolved to a defined edge tile, and the scene SHALL use fog and the last-ring skirt so the dataset edge does not read as a hole or an abrupt cliff. Free-fly camera movement SHALL NOT be restricted to a dataset boundary.
 
-#### Scenario: Camera approaches the dataset edge
+#### Scenario: Camera flies beyond the dataset edge
 
-- **WHEN** the camera moves toward the outer part of the Jotunheimen dataset
+- **WHEN** the camera moves past the outer part of the Jotunheimen dataset
 - **THEN** the scene SHALL continue to render terrain using the defined edge policy
 - **AND** no missing-texture or background-coloured hole SHALL appear inside the last ring
+- **AND** the camera SHALL NOT be clamped back inside the dataset
 
 #### Scenario: Edge is hidden at the horizon
 
@@ -92,7 +93,7 @@ The pre-baked scene SHALL define what happens beyond the dataset bounds. Out-of-
 
 ### Requirement: Pre-baked showcase scene
 
-The project SHALL provide a `dem.html` scene that uses the shared renderer and pre-baked source with the Jotunheimen configuration. The scene SHALL provide a bounded flight/cruise camera, the existing sun/normal/debug controls, loading and stats feedback, dataset attribution, and a link to the procedural showcase.
+The project SHALL provide a `dem.html` scene that uses the shared renderer and pre-baked source with the Jotunheimen configuration. The scene SHALL provide free-fly movement with an optional auto-cruise orbit, the existing sun/normal/debug controls, loading and stats feedback, dataset attribution, and a link to the procedural showcase.
 
 #### Scenario: Scene boots from checked-in assets
 

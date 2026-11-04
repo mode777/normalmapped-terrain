@@ -145,6 +145,7 @@ export const terrainFragmentShader: string = /* glsl */ `
   uniform float uPixelScale;
 
   uniform float uNormalStrength;
+  uniform float uNormalLodBias;
   uniform vec3 uSunDirection;
   uniform vec3 uSunColor;
   uniform vec3 uSkyColor;
@@ -195,7 +196,6 @@ export const terrainFragmentShader: string = /* glsl */ `
     }
 
     float spacing = uBaseSpacing * exp2(vLevel);
-    vec2 uvNormal = cacheUv(vWorldPos.xz, spacing, uNormalTileCells);
 
     if (uDebugTiles > 0.5) {
       float tw = uTileCells * spacing;
@@ -208,9 +208,14 @@ export const terrainFragmentShader: string = /* glsl */ `
       return;
     }
 
-    // ---- normal map, with a narrow cross-fade to the next LOD that matches
-    //      the vertex morph band ------------------------------------------
-    vec3 nm = texture(uNormalArray, vec3(uvNormal, vLevel)).xyz * 2.0 - 1.0;
+    // ---- normal map, with an optional negative LOD bias -----------------
+    // The DEM page sets uNormalLodBias to 1. The next-finer normal layer is
+    // resident in the 4x4 cache and covers the whole coarse ring, so this
+    // gives distant shading detail without mipmap bleeding across slots.
+    float nLevel = max(vLevel - uNormalLodBias, 0.0);
+    float nSpacing = uBaseSpacing * exp2(nLevel);
+    vec2 uvNormalBiased = cacheUv(vWorldPos.xz, nSpacing, uNormalTileCells);
+    vec3 nm = texture(uNormalArray, vec3(uvNormalBiased, nLevel)).xyz * 2.0 - 1.0;
 
     float blend = smoothstep(
       uCenterCells * 2.0 - max(uMorphCells, 1.0),
@@ -218,10 +223,13 @@ export const terrainFragmentShader: string = /* glsl */ `
       vEdge
     );
 
-    if (vLevel < uLevels - 1.0) {
-      float spacing2 = spacing * 2.0;
-      vec2 uv2 = cacheUv(vWorldPos.xz, spacing2, uNormalTileCells);
-      vec3 nm2 = texture(uNormalArray, vec3(uv2, vLevel + 1.0)).xyz * 2.0 - 1.0;
+    // Match the child ring's biased layer at the shared boundary. At level 0
+    // the bias clamps to layer 0, so there is no coarser normal to blend to.
+    float targetLevel = nLevel + (vLevel > 0.0 ? 1.0 : 0.0);
+    if (targetLevel > nLevel && nLevel < uLevels - 1.0) {
+      float nSpacing2 = nSpacing * 2.0;
+      vec2 uv2 = cacheUv(vWorldPos.xz, nSpacing2, uNormalTileCells);
+      vec3 nm2 = texture(uNormalArray, vec3(uv2, targetLevel)).xyz * 2.0 - 1.0;
       nm = mix(nm, nm2, blend);
     }
 

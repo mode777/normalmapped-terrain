@@ -294,19 +294,25 @@ The fragment shader also clips each ring to its parent's square (section
 ### 6.2 Fragment shader
 
 ```
-nm    = texture(uNormalArray, vec3(uv, level)).xyz * 2 - 1
-mapN  = normalize(vec3(nm.x * strength, nm.z, nm.y * strength))
+nLevel = max(level - uNormalLodBias, 0)
+nm     = texture(uNormalArray, vec3(uv(nLevel), nLevel)).xyz * 2 - 1
+mapN   = normalize(vec3(nm.x * strength, nm.z, nm.y * strength))
 ```
+
+The DEM page sets `uNormalLodBias` to 1: each ring samples the next-finer
+normal layer, which is already resident in the 4×4 cache and covers the whole
+coarse ring. The procedural page keeps the bias at 0. This is the
+tile-atlas-safe equivalent of a negative mipmap LOD bias; real mipmaps would
+bleed across packed slots.
 
 Lighting, albedo bands, specular, fog and sky follow the shared terrain
 palette. Slope-based rock/grass/snow assignment uses the normal-map normal,
 so normal-map detail also drives material boundaries.
 
 LOD normal seam: the normal map's resolution changes at ring boundaries. A
-narrow cross-fade band in the fragment shader samples both layer `L` and
-`L+1` and blends by distance to the ring edge. All levels live in the same
-array texture, so this is cheap. The blend is tuned or removed after visual
-tests.
+narrow cross-fade band samples the biased layer and the next coarser layer
+(`nLevel + 1` when `level > 0`) and blends by distance to the ring edge. At
+level 0 the bias clamps to layer 0 and there is no coarser normal to blend to.
 
 ### 6.3 Height/normal encoding invariants
 

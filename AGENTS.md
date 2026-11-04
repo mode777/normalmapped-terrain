@@ -12,8 +12,8 @@ Two proof-of-concept pages share one renderer:
   camera free-flies over the terrain.
 - **`dem.html`** — a checked-in Kartverket DTM 10 window of Jotunheimen,
   rendered through the same `ClipmapRenderer` and `TileCache` with a
-  pre-baked `TileSource`, a bounded orbit camera and a finite-world edge
-  policy.
+  pre-baked `TileSource`, free-fly movement plus an optional auto-cruise
+  orbit, and a finite-world edge policy.
 
 Ship anything visual only after verifying it renders — see
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
@@ -89,7 +89,7 @@ the binary is at `~/.local/bin/openspec`.
 | `src/terrain/renderer.ts` | Shared texture-backed `ClipmapRenderer` |
 | `src/terrain/ui.ts` | DOM control wiring; `initUI(callbacks)` returns a setter API |
 | `src/dem/prebaked-source.ts` | Manifest/tile `TileSource`, coarse `heightAt`, edge clamp |
-| `src/dem/main.ts` | DEM page: manifest-driven config, bounded orbit, UI, stats |
+| `src/dem/main.ts` | DEM page: manifest-driven config, free-fly/orbit, UI, stats |
 | `src/dem/dem.css` | DEM page additions to `src/styles.css` |
 | `infinite.html` | The procedural PoC entry page |
 | `dem.html` | The pre-baked Jotunheimen DEM entry page |
@@ -188,6 +188,13 @@ the binary is at `~/.local/bin/openspec`.
     `normalScale=2`, outer radius 15.36 km over a 30.72 km checked-in window.
     The manifest is the source of truth for the page config; do not hardcode
     the dataset's spacing or normal scale in `dem.html` code.
+18. **Normal shading supports a one-layer LOD bias.** The DEM page sets
+    `uNormalLodBias = 1`, sampling normal layer `max(vLevel - 1, 0)`; the
+    procedural page keeps 0. The 4×4 finer-layer cache covers the whole coarse
+    ring, so this is safe. The boundary cross-fade target is `nLevel + 1` for
+    `vLevel > 0`. Do not add GPU mipmaps to the tiled normal atlas: mips bleed
+    across packed slots and would need a full-layer regenerate after every
+    `texSubImage3D`.
 
 ## Conventions & practices
 

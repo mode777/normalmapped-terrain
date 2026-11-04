@@ -162,6 +162,8 @@ async function boot(): Promise<void> {
   // The DEM view looks across a 30 km chunk; the infinite page's
   // 2.4 / outerExtent fog would wash out the mid-ground.
   terrainRenderer.setFogDensity(1.1 / metrics.outerExtent);
+  // Sample the next-finer normal layer so distant ridges keep shading detail.
+  terrainRenderer.setNormalLodBias(1);
   terrainRenderer.setNormalStrength(state.normalStrength);
 
   source = new PrebakedTileSource({ manifest, manifestUrl });
@@ -173,7 +175,6 @@ async function boot(): Promise<void> {
     heightAt: (x, z) => source.heightAt ? source.heightAt(x, z) : 0,
     heightScale: config.heightScale,
     initialSpeed: 60,
-    boundsRadius: 3000,
     orbitRadius: 2500,
     cruiseMode: 'orbit',
     cruiseAltitude: 900,

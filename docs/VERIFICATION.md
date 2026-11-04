@@ -90,20 +90,23 @@ crack test, and a boundary view. `analyze-dem.ts` asserts:
 | no console/page errors | manifest, PNG decode, shaders and uploads succeeded |
 | terrain `std > 8` on every shot | not blank / blown out |
 | black-pixel fraction `< 8%` | no large holes or unlit massifs |
-| normal-map `hf > 1.05 ×` flat-normal `hf` | the 2× normal tiles contribute detail |
+| normal-map `hf > 1.05 ×` flat-normal `hf` | the 2× normal tiles and LOD bias contribute detail |
 | LOD debug `std > 20` | the ring-colour view is varied |
 | tile-grid `std > 20` | the checkerboard is visible |
 | `< 0.2 %` magenta in the crack shot | no gaps between clipmap rings |
 
 Reference values from the checked-in 2× dataset (Nov 2026): 3,080 tiles,
-~101 MB checked in, 58 resident after priming, 96 resident after a warp,
-102k triangles, 4 draw calls, zero upload errors, normal-map `hf=1.69` vs
-flat `hf=0.36`, and zero crack-test magenta. The 2× normal PNGs are ~24 KB
-each; see [DEM_DATASET.md](DEM_DATASET.md) for the source and bake details.
+~101 MB checked in, ~60 resident after priming, 96 resident after a warp,
+102k triangles, 4 draw calls, zero upload errors, normal-map `hf=2.24` vs
+flat `hf=0.36`, and zero crack-test magenta. The DEM page sets
+`uNormalLodBias = 1`, so each ring samples the next-finer normal layer; the
+procedural page keeps the bias at 0. The 2× normal PNGs are ~24 KB each; see
+[DEM_DATASET.md](DEM_DATASET.md) for the source and bake details.
 
-The boundary shot (`08-boundary.png`) places the camera at the soft flight
-bound. The pre-baked source clamps out-of-range tile requests to the nearest
-edge tile, and the fog/last-ring skirt hide the finite world edge.
+The boundary shot (`08-boundary.png`) warps to `(6, 0) km`, beyond the old
+3 km camera bound, to prove free flight is not clamped. The pre-baked source
+clamps out-of-range tile requests to the nearest edge tile, and the fog/last
+ring skirt hide the finite world edge.
 
 ## Where to run the screenshot loop
 

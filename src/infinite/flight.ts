@@ -25,9 +25,7 @@ export interface FlightControllerOptions {
   heightAt: (x: number, z: number) => number;
   heightScale: number;
   initialSpeed?: number;
-  /** Soft circular bound for free flight and the orbit mode. */
-  boundsRadius?: number;
-  /** Orbit radius; defaults to 75% of boundsRadius. */
+  /** Orbit radius used by `cruiseMode: 'orbit'`; defaults to 0 (no orbit). */
   orbitRadius?: number;
   cruiseMode?: 'wander' | 'orbit';
   /** Metres above ground used by orbit mode; defaults to 180. */
@@ -51,7 +49,6 @@ export class FlightController {
   readonly canvas: HTMLCanvasElement;
   readonly heightAt: (x: number, z: number) => number;
   readonly heightScale: number;
-  readonly boundsRadius: number | null;
   readonly orbitRadius: number;
   readonly cruiseMode: 'wander' | 'orbit';
   readonly cruiseAltitude: number;
@@ -93,7 +90,6 @@ export class FlightController {
     heightAt,
     heightScale,
     initialSpeed = 80,
-    boundsRadius,
     orbitRadius,
     cruiseMode = 'wander',
     cruiseAltitude = 180,
@@ -104,8 +100,7 @@ export class FlightController {
     this.heightAt = heightAt;
     this.heightScale = heightScale;
     this.speed = initialSpeed;
-    this.boundsRadius = boundsRadius ?? null;
-    this.orbitRadius = orbitRadius ?? (boundsRadius !== undefined ? boundsRadius * 0.75 : 0);
+    this.orbitRadius = orbitRadius ?? 0;
     this.cruiseMode = cruiseMode;
     this.cruiseAltitude = cruiseAltitude;
     this.defaultView = defaultView ?? null;
@@ -302,15 +297,6 @@ export class FlightController {
         this.x += mx * step;
         this.z += mz * step;
         this.y += my * step;
-      }
-    }
-
-    if (this.boundsRadius !== null) {
-      const radius = Math.hypot(this.x, this.z);
-      if (radius > this.boundsRadius) {
-        const scale = this.boundsRadius / radius;
-        this.x *= scale;
-        this.z *= scale;
       }
     }
 

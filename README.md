@@ -67,21 +67,22 @@ baked offline by `tools/bake-dem.ts`, checked into
 
 - **Source:** Kartverket DTM 10 via the Geonorge WCS, EPSG:25833, CC BY 4.0.
 - **Grid:** 10 m, 6 LODs, 2× normal resolution, 3,080 tiles, ~101 MB checked
-  in. The 2× normal PNGs dominate the size.
+  in. The 2× normal PNGs dominate the size; the fragment shader biases each
+  ring to the next-finer normal layer for sharper distant shading.
 - **Bake tool:** Node + `geotiff` + `proj4` + `pngjs`; no GDAL. All LODs come
   from one height grid, and normals use a one-texel halo so tile edges are
   continuous.
-- **Finite world:** the camera has a soft boundary, the source clamps
-  out-of-range tiles to the nearest edge, and fog/last-ring skirt hide the
-  boundary.
+- **Finite world:** the camera free-flies without a boundary; the source
+  clamps out-of-range tile requests to the nearest edge tile, and fog/last-ring
+  skirt hide the dataset edge.
 - **Attribution:** © Kartverket, Nasjonal høydemodell DTM 10, CC BY 4.0,
   modified (resampled, tiled, normals derived). See
   [docs/DEM_DATASET.md](docs/DEM_DATASET.md).
 
 ## Infinite page controls
 
-The DEM page uses the same controls, with a bounded auto-cruise orbit instead
-of the unbounded wander.
+The DEM page uses the same controls, with a fixed-radius auto-cruise orbit
+instead of the unbounded wander.
 
 | Input | Action |
 |---|---|

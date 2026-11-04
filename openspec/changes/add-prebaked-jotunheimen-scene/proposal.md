@@ -10,7 +10,7 @@ The renderer is already texture-driven—its shaders contain no procedural terra
 - Extract the clipmap rendering core (geometry, material, uniforms, per-level origins, debug views) from the page orchestration so `infinite.html` and the new DEM page share it.
 - Add a Node/TypeScript **DEM bake tool** that downloads Kartverket terrain data, mosaics it into one metric grid, bakes height and normal tiles at every LOD, validates edge continuity, and writes a manifest plus tile files.
 - Check in the **Jotunheimen, Norway** dataset (option A): 30.72 km × 30.72 km at 10 m spacing, 6 LODs, 2× normal resolution, roughly 100 MB of derived tiles (the 2× normal PNGs dominate the size). Source: Kartverket Nasjonal høydemodell DTM 10, CC BY 4.0.
-- Add a new **`dem.html`** scene with a bounded camera, coarse CPU height grid for flight clearance, dataset attribution, and the existing visual/debug controls. Link it with `infinite.html`.
+- Add a new **`dem.html`** scene with free-fly movement plus an optional auto-cruise orbit, a coarse CPU height grid for flight clearance, dataset attribution, and the existing visual/debug controls. Link it with `infinite.html`.
 - Add data-integrity and seam tests, a headless screenshot driver for the DEM page, and documentation for the data source, bake parameters, regeneration, and verification.
 - Add `geotiff` and `proj4` as dev dependencies; no GDAL or system raster tooling is required.
 

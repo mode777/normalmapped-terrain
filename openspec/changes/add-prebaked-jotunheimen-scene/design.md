@@ -19,7 +19,7 @@ See `proposal.md` for motivation. The relevant current state:
 - Make the renderer consume a `TileSource` so procedural and pre-baked terrain share geometry, shaders, cache, and LOD behavior.
 - Keep `infinite.html` visually and behaviorally unchanged.
 - Produce a reproducible, checked-in Jotunheimen dataset with seam-free normals and a self-describing manifest.
-- Add a `dem.html` scene with bounded flight, finite-world edge handling, attribution, and visual QA.
+- Add a `dem.html` scene with free-fly movement and an optional orbit, finite-world edge handling, attribution, and visual QA.
 - Keep the bake tool dependency-light and runnable without system raster tooling.
 
 **Non-Goals:**
@@ -42,7 +42,7 @@ The DEM scene uses a separate page rather than a runtime dataset switch on `infi
 
 - The infinite scene is tuned for 2 m spacing, 10 LODs, 8× normals, and a ~160 MiB normal cache.
 - The DEM scene uses 10 m spacing, 6 LODs, 2× normals, and a much smaller cache.
-- The infinite camera wanders over an unbounded world; the DEM camera is bounded and fogged to a finite dataset.
+- The infinite camera wanders over an unbounded world; the DEM camera free-flies over a finite dataset, with source edge clamping and fog hiding the boundary.
 
 A runtime switch would require rebuilding textures, geometry, uniforms, and camera behavior. A second page demonstrates the shared core more cleanly. Alternative: a `?dataset=` parameter that rebuilds the scene. Rejected for the same reasons; it would also complicate the procedural page's QA.
 
@@ -148,6 +148,8 @@ Kartverket WCS (EPSG:25833)
 
 **Normals.** For each tile at LOD `L`, sample a `(64·normalScale + 2)²` halo at `normalSpacing = S_L / normalScale` from the same global grid using bilinear interpolation. Call the shared `bakeTileNormals(halo, normalTileSize, normalSpacing, heightScale)`. The halo means the normals adjacent to a tile boundary are computed from the same world samples as the neighbour, so the normal field is continuous after RGB8 quantization. The bake tool compares boundary-adjacent normals against a reference recomputation from the global grid and writes a seam report; `test:dem` verifies the report and can rebake a deterministic sample of boundary tiles.
 
+**Normal LOD bias.** The fragment shader samples normal layer `max(vLevel - uNormalLodBias, 0)`; the DEM page sets the bias to 1, so distant rings use the next-finer normal layer that is already resident in the 4×4 cache. The procedural page keeps 0. The boundary cross-fade target is `nLevel + 1` for `vLevel > 0`, matching the child ring's biased layer; level 0 has no finer layer and does not cross-fade. This is the tile-atlas-safe equivalent of a negative mipmap LOD bias: actual mipmaps would bleed across the packed tile slots and require a full-layer regenerate after every `texSubImage3D`.
+
 **Heights.** Height tiles store `uint16 = round(normalizedHeight * 65535)`. The runtime converts to `Float32Array` and the cache converts to the renderer's `R16F` upload. The source's minimum is ~0.19 after normalization, which is fine for the existing material bands.
 
 **Coarse height.** A 1024² uint16 grid at ~30 m spacing is checked in with the dataset. `PrebakedTileSource.heightAt` bilinearly samples it, applies a 3×3 max filter to avoid missing peaks, and adds a small safety margin. This keeps the flight guard independent of GPU readback and costs ~2 MB.
@@ -160,7 +162,7 @@ Alternative: store normals as raw RGBA `.bin`. Rejected because the PNGs compres
 
 ### 7. Finite-world edge policy
 
-The dataset radius is 15.36 km, exactly the outer radius of the six-level clipmap. The camera is bounded to a 3 km soft radius, so the visible edge is at least 12 km away. The pre-baked source clamps out-of-range `(tx, ty)` to the nearest available tile. Fog is tuned with `fogDensity = 2.4 / outerExtent` and the last-ring skirt hides the horizon. The crack test runs from a viewpoint near the boundary to ensure no missing-texture holes appear.
+The dataset radius is 15.36 km, exactly the outer radius of the six-level clipmap. The camera is free to fly beyond the dataset; the pre-baked source clamps out-of-range `(tx, ty)` to the nearest available tile. Fog and the last-ring skirt hide the repeated edge, and the crack test runs from a viewpoint beyond the boundary to ensure no missing-texture holes appear.
 
 Alternative: add a generated clamped border ring around the dataset. Rejected for the first version because it increases the checked-in size and hides the same problem that the camera bound and fog already cover. The source clamp is the runtime equivalent.
 
@@ -168,11 +170,11 @@ Alternative: add a generated clamped border ring around the dataset. Rejected fo
 
 `FlightController` gains optional, backward-compatible settings:
 
-- `boundsRadius`: soft circular clamp for free flight.
 - `cruiseMode: 'wander' | 'orbit'`: the DEM page uses `orbit`; the procedural page keeps `wander`.
-- `defaultView`: initial `x`, `z`, `yaw`, `pitch`, and optional altitude. The DEM page uses a scenic start south of the massif looking north; the procedural default is unchanged.
+- `orbitRadius`: radius for the optional auto-cruise orbit.
+- `defaultView`: initial `x`, `z`, `yaw`, `pitch`, and optional altitude. The DEM page uses a scenic start east of the massif looking inward; the procedural default is unchanged.
 
-The orbit path runs at a 2.5 km radius, looking slightly inward and down. The terrain guard uses the source's `heightAt`; the camera remains above the coarse surface plus the existing clearance. The user can take control; the soft bound keeps the view inside the fogged dataset.
+The orbit path runs at a 2.5 km radius, looking slightly inward and down. The terrain guard uses the source's `heightAt`; the camera remains above the coarse surface plus the existing clearance. Free flight is not clamped to a dataset boundary; the user can fly past the edge, where the source repeats the nearest edge tiles under the fog.
 
 ### 9. Verification
 
@@ -198,7 +200,7 @@ The orbit path runs at a 2.5 km radius, looking slightly inward and down. The te
 | Kartverket WCS is slow or times out for large requests | 1536² chunks, retries, local cache, `--input` local GeoTIFF support, documented snapshot date |
 | Normal seams at tile edges | Single global height grid, one-texel halo, boundary reference check, `test:dem` sample rebake |
 | LOD mismatch in the morph band | All LODs sampled from the same global grid; no independent per-level bakes |
-| Finite edge looks like a hole or cliff | Camera soft bound, source clamp, fog tuned to the last ring, last-ring skirt, boundary crack screenshot |
+| Finite edge looks like a hole or cliff | Source clamp, fog outside the last ring, last-ring skirt, boundary crack screenshot |
 | PNG decode adds boot latency | 128² normal PNGs, limited fetch concurrency, `createImageBitmap`, HTTP cache; the visible 3×3 window is only ~27 tiles |
 | Refactor regresses the procedural scene | Behavior-preserving extraction, existing QA hooks, rerun the infinite screenshot loop, compare visuals |
 | Pre-baked source masks a configuration mismatch | Manifest validation against `TerrainConfig`; visible error; no silent fallback |
@@ -210,7 +212,7 @@ The orbit path runs at a 2.5 km radius, looking slightly inward and down. The te
 1. **Renderer/source refactor:** create `src/terrain/`, move the pure modules, extract `ClipmapRenderer`, split `TileStreamer` into `TileCache` + `ProceduralTileSource`, rewire `infinite.html`. Verify typecheck, `test:infinite`, and the screenshot loop before touching DEM data.
 2. **Bake tool:** implement the WCS source, grid mosaic, LOD tiling, normal halo, manifest, and validator. Test against a small local fixture and a 2 km real subset before the full bake.
 3. **Dataset:** bake Jotunheimen, run `test:dem`, inspect the preview, and commit the manifest/tiles/coarse grid.
-4. **DEM page:** add `dem.html`, `PrebakedTileSource`, bounded flight, UI/attribution, and QA hooks. Verify with headless screenshots and the boundary crack test.
+4. **DEM page:** add `dem.html`, `PrebakedTileSource`, free-fly/orbit flight, UI/attribution, and QA hooks. Verify with headless screenshots and the boundary crack test.
 5. **Docs/CI:** update `README.md`, `AGENTS.md`, `docs/VERIFICATION.md`, add `docs/DEM_DATASET.md`, add `test:dem` to CI, and rerun the full build.
 
 Rollback: the refactor is internal; reverting the change restores the monolithic infinite page. The new dataset and page are additive and can be removed without affecting the procedural scene. Landing the refactor as its own commit within the change keeps that rollback cheap.

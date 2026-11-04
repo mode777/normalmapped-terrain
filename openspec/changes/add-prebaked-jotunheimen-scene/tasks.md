@@ -32,7 +32,7 @@
 ## 4. Pre-baked source and DEM scene
 
 - [x] 4.1 Implement `src/dem/prebaked-source.ts` to load and validate the manifest, resolve tile URLs, fetch/decode uint16 heights and RGBA8 PNG normals, and expose coarse `heightAt` with a peak-safe filter; verify `dem.html` resolves all visible tiles and reports manifest/config mismatches clearly.
-- [x] 4.2 Extend `FlightController` with optional `boundsRadius`, `cruiseMode: 'orbit'`, and `defaultView` while preserving procedural defaults; verify the infinite page behavior is unchanged and the DEM camera stays inside its soft bound.
+- [x] 4.2 Extend `FlightController` with optional `orbitRadius`, `cruiseMode: 'orbit'`, and `defaultView` while preserving procedural defaults; verify the infinite page behavior is unchanged and DEM free flight is not clamped to a dataset boundary.
 - [x] 4.3 Add `dem.html`, `src/dem/main.ts`, and page styles; wire the shared `ClipmapRenderer`, `TileCache`, and `PrebakedTileSource` with the DEM config; verify the page boots from checked-in assets and reaches a ready state without procedural workers.
 - [x] 4.4 Add the DEM controls, dataset attribution, stats/loading text, and cross-links with `infinite.html`; verify the attribution is visible, the links resolve, and the controls update sun/normal/debug/flight behavior.
 - [x] 4.5 Expose `window.__dem` QA hooks for tile waiting, warping, LOD/tile debug, wireframe, and crack mode; verify each hook is callable from the browser console.
