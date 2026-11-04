@@ -1,0 +1,19 @@
+{
+  "name": "Grand Canyon (SRTM)",
+  "source": "Mapzen / AWS Terrain Tiles, terrarium encoding, zoom 12 (SRTM 1 arc-second + friends)",
+  "credit": "Elevation: real SRTM radar data via Mapzen/AWS Terrain Tiles (public domain, opendata.aws/terrain-tiles).\nReal relief 1933 m over 31.6 km; vertical scale exaggerated ×2.5 for visualisation.",
+  "res": 1024,
+  "metersPerPixel": 31,
+  "worldSizeX": 31622,
+  "worldSizeZ": 31622,
+  "heightScale": 4832,
+  "heightMin": 686,
+  "heightMax": 2619,
+  "exaggeration": 2.5,
+  "latLonBounds": {
+    "south": 35.956,
+    "north": 36.24,
+    "west": -112.2728,
+    "east": -111.9212
+  }
+}

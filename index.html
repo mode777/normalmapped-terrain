@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Normal-Mapped Terrain — a Three.js PoC</title>
+  <meta name="description" content="Proof of concept: a low-poly terrain mesh lit entirely by a high-resolution normal map in a custom pixel shader." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛰️</text></svg>" />
+  <script type="module" crossorigin src="./assets/main-DtM7XY9W.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/shaders-D9furo4h.js">
+  <link rel="stylesheet" crossorigin href="./assets/shaders-BwPL5o9I.css">
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <!-- Loading overlay -->
+  <div id="loading" class="overlay">
+    <div class="loading-card">
+      <h1>Normal-Mapped Terrain</h1>
+      <p class="sub">low-poly mesh · high-res normals</p>
+      <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+      <p id="loading-status">Warming up…</p>
+    </div>
+  </div>
+
+  <!-- Title card -->
+  <header id="title-card" class="glass hidden">
+    <h1>Normal-Mapped Terrain</h1>
+    <p class="pipeline">
+      <span id="pipe-res">2048²</span> heightfield
+      <span class="arrow">→</span> Sobel normal map
+      <span class="arrow">→</span> fragment shader
+    </p>
+    <p class="tagline">The mesh stays low-poly. The <em>lighting</em> comes from the detailed map.</p>
+    <p class="tagline"><a href="./infinite.html">Try the infinite-terrain PoC →</a></p>
+  </header>
+
+  <!-- Stats -->
+  <div id="stats" class="glass chip hidden">
+    <span><b id="stat-fps">–</b> fps</span>
+    <span class="dot"></span>
+    <span><b id="stat-tris">–</b> tris</span>
+    <span class="dot"></span>
+    <span><b id="stat-mesh">–</b> mesh</span>
+    <span class="dot"></span>
+    <span><b id="stat-map">–</b> normals</span>
+  </div>
+
+  <!-- Mode switcher -->
+  <nav id="mode-bar" class="glass hidden">
+    <button class="mode-btn" data-mode="A">
+      <span class="mode-key">A</span>
+      <span class="mode-name">Vertex normals</span>
+      <span class="mode-desc" id="tris-A">low-poly baseline</span>
+    </button>
+    <button class="mode-btn" data-mode="split">
+      <span class="mode-key">A|B</span>
+      <span class="mode-name">Split compare</span>
+      <span class="mode-desc">drag the divider</span>
+    </button>
+    <button class="mode-btn active" data-mode="B">
+      <span class="mode-key">B</span>
+      <span class="mode-name">Normal map</span>
+      <span class="mode-desc" id="tris-B">the point of this PoC</span>
+    </button>
+    <button class="mode-btn" data-mode="C">
+      <span class="mode-key">C</span>
+      <span class="mode-name">Reference mesh</span>
+      <span class="mode-desc" id="tris-C">ground truth</span>
+    </button>
+  </nav>
+
+  <!-- Split divider -->
+  <div id="split-divider" class="hidden">
+    <div class="divider-line"></div>
+    <div class="divider-handle">⇄</div>
+    <div class="split-label left">vertex normals</div>
+    <div class="split-label right">normal map</div>
+  </div>
+
+  <!-- Settings panel -->
+  <aside id="panel" class="glass hidden">
+    <div class="panel-head">
+      <h2>Controls</h2>
+      <button id="panel-toggle" title="collapse">–</button>
+    </div>
+    <div class="panel-body">
+      <section>
+        <h3>Dataset</h3>
+        <div class="seg" id="dataset-select">
+          <button class="active" data-ds="procedural">Procedural</button>
+          <button data-ds="grand-canyon">Grand Canyon</button>
+        </div>
+        <p id="dataset-info" class="info"></p>
+      </section>
+
+      <section>
+        <h3>Sun</h3>
+        <label class="slider-row">Azimuth <input type="range" id="sun-azimuth" min="0" max="360" value="305" step="1" /><span id="sun-azimuth-val">305°</span></label>
+        <label class="slider-row">Elevation <input type="range" id="sun-elevation" min="6" max="85" value="34" step="1" /><span id="sun-elevation-val">34°</span></label>
+      </section>
+
+      <section>
+        <h3>Terrain</h3>
+        <label class="slider-row">Mesh resolution <input type="range" id="mesh-res" min="48" max="512" value="192" step="16" /><span id="mesh-res-val">192²</span></label>
+        <label class="slider-row">Normal strength <input type="range" id="normal-strength" min="0" max="2.5" value="1" step="0.05" /><span id="normal-strength-val">1.00×</span></label>
+        <label class="check-row"><input type="checkbox" id="wireframe" /> Wireframe</label>
+      </section>
+
+      <section>
+        <h3>Maps driving the shader</h3>
+        <div class="maps">
+          <figure><canvas id="preview-height" width="132" height="132"></canvas><figcaption>height field</figcaption></figure>
+          <figure><canvas id="preview-normal" width="132" height="132"></canvas><figcaption>normal map</figcaption></figure>
+        </div>
+      </section>
+
+      <section class="credits">
+        <p id="dataset-credit"></p>
+      </section>
+    </div>
+  </aside>
+
+  <footer id="footnote" class="hidden">
+    <b>A</b> vertex normals · <b>B</b> normals sampled from the map in the pixel shader · <b>C</b> what a high-res mesh would buy you
+  </footer>
+
+</body>
+</html>
