@@ -52,9 +52,12 @@ holds the generated OpenSpec skills and `/opsx-*` commands — refresh them with
 
 Use `/opsx-propose <idea>` (or the `openspec-propose` skill) before a
 non-trivial change, `/opsx-apply` to implement, and `/opsx-archive` when done.
-Commit and merge when apply finishes; archive on main and commit after archive
-or sync. Validate with `openspec validate --all`. In this container `openspec`
-may not be on `PATH`; the binary is at `~/.local/bin/openspec`.
+Commit and merge when apply finishes, then **push to `origin/main`
+immediately**. Every apply ends with a push; every push to `main` runs the
+Pages deploy workflow. Do not hand off a successful apply with local-only
+commits. Archive on main and commit/push after archive or sync. Validate with
+`openspec validate --all`. In this container `openspec` may not be on `PATH`;
+the binary is at `~/.local/bin/openspec`.
 
 ## Repo map
 
@@ -226,10 +229,13 @@ may not be on `PATH`; the binary is at `~/.local/bin/openspec`.
   `npm run bake:dem -- --config tools/dem/jotunheimen.json`, not by hand.
   `npm run test:dem` is the dataset gate; source GeoTIFFs stay out of git.
 - Commits: concise imperative subject lines, e.g. `Fix Sobel z-gradient sign`.
-- Deploy = push to `main`. GitHub Actions runs the unit checks, builds the
-  site and publishes `dist/` with the Pages Actions flow. Pages is configured
-  with source **GitHub Actions**, not a `gh-pages` branch. `vite.config.ts`
-  sets `base: './'` for project-page paths — don't remove that.
+- Deploy = push to `main`. **Push after every successful apply**; the push
+  itself runs the deploy workflow (unit/dataset checks, build, Pages publish),
+  so there is no separate deploy command. Do not leave apply commits local.
+  GitHub Actions publishes `dist/` with the Pages Actions flow. Pages is
+  configured with source **GitHub Actions**, not a `gh-pages` branch.
+  `vite.config.ts` sets `base: './'` for project-page paths — don't remove
+  that.
 - Default CI runs `npm run test:infinite`, `npm run test:dem` and
   `npm run build`; the build script includes `tsc --noEmit`. The headless
   screenshot loops are manual visual-debugging tools; set `--chrome` or

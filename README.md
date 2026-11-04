@@ -170,9 +170,10 @@ native type stripping.
 
 Deployment is automatic: pushing to `main` runs
 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml), which installs
-dependencies, runs the unit checks, builds the site and publishes `dist/` to
-GitHub Pages via the Pages Actions flow. Deployments are serialized by the
-`pages` concurrency group, so the newest push deploys last.
+dependencies, runs the unit/dataset checks, builds the site and publishes
+`dist/` to GitHub Pages via the Pages Actions flow. Every successful apply is
+committed and pushed, so every apply ends with a deploy. Deployments are
+serialized by the `pages` concurrency group, so the newest push deploys last.
 
 Live at:
 
