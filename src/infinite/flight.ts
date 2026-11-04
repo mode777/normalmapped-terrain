@@ -6,29 +6,70 @@
  * the GPU in the comfortable float range.
  */
 
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+import type * as THREE from 'three';
+
+const clamp = (v: number, a: number, b: number): number => Math.max(a, Math.min(b, v));
+
+export interface FlightControllerOptions {
+  camera: THREE.PerspectiveCamera;
+  canvas: HTMLCanvasElement;
+  heightAt: (x: number, z: number) => number;
+  heightScale: number;
+  initialSpeed?: number;
+}
+
+export interface FlightInfo {
+  x: number;
+  z: number;
+  y: number;
+  speed: number;
+  altitude: number;
+  autoCruise: boolean;
+  yaw: number;
+  pitch: number;
+}
 
 export class FlightController {
-  constructor({ camera, canvas, heightAt, heightScale, initialSpeed = 80 }) {
+  readonly camera: THREE.PerspectiveCamera;
+  readonly canvas: HTMLCanvasElement;
+  readonly heightAt: (x: number, z: number) => number;
+  readonly heightScale: number;
+
+  x = 0;
+  z = 0;
+  y = 900;
+  yaw = 0.35;
+  pitch = -0.08;
+  speed: number;
+  autoCruise = true;
+  cruiseTime = 0;
+  paused = false;
+  pointerLocked = false;
+  keys = new Set<string>();
+  dragging = false;
+  lastPointerX = 0;
+  lastPointerY = 0;
+
+  onAutoCruiseChange: ((on: boolean) => void) | null = null;
+  onPointerLockChange: ((locked: boolean) => void) | null = null;
+  onSpeedChange: ((speed: number) => void) | null = null;
+  onUserInput: (() => void) | null = null;
+
+  private readonly _onKeyDown: (e: KeyboardEvent) => void;
+  private readonly _onKeyUp: (e: KeyboardEvent) => void;
+  private readonly _onMouseMove: (e: MouseEvent) => void;
+  private readonly _onPointerDown: (e: PointerEvent) => void;
+  private readonly _onPointerMove: (e: PointerEvent) => void;
+  private readonly _onPointerUp: (e: PointerEvent) => void;
+  private readonly _onPointerLockChange: () => void;
+  private readonly _onWheel: (e: WheelEvent) => void;
+
+  constructor({ camera, canvas, heightAt, heightScale, initialSpeed = 80 }: FlightControllerOptions) {
     this.camera = camera;
     this.canvas = canvas;
     this.heightAt = heightAt;
     this.heightScale = heightScale;
-
-    this.x = 0;
-    this.z = 0;
-    this.y = 900;
-    this.yaw = 0.35;
-    this.pitch = -0.08;
     this.speed = initialSpeed;
-    this.autoCruise = true;
-    this.cruiseTime = 0;
-    this.paused = false;
-    this.pointerLocked = false;
-    this.keys = new Set();
-    this.dragging = false;
-    this.lastPointerX = 0;
-    this.lastPointerY = 0;
 
     this._onKeyDown = (e) => this._handleKey(e, true);
     this._onKeyUp = (e) => this._handleKey(e, false);
@@ -61,16 +102,11 @@ export class FlightController {
     window.addEventListener('pointerup', this._onPointerUp);
     canvas.addEventListener('wheel', this._onWheel, { passive: false });
 
-    this.onAutoCruiseChange = null;
-    this.onPointerLockChange = null;
-    this.onSpeedChange = null;
-    this.onUserInput = null;
-
     this.reset();
   }
 
-  _handleKey(e, down) {
-    const tag = e.target && e.target.tagName;
+  private _handleKey(e: KeyboardEvent, down: boolean): void {
+    const tag = e.target instanceof HTMLElement ? e.target.tagName : '';
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'BUTTON') return;
 
     const code = e.code;
@@ -85,14 +121,14 @@ export class FlightController {
     }
   }
 
-  _handleMouseMove(e) {
+  private _handleMouseMove(e: MouseEvent): void {
     if (!this.pointerLocked) return;
     this.yaw -= e.movementX * 0.0022;
     this.pitch -= e.movementY * 0.0022;
     this.pitch = clamp(this.pitch, -1.45, 1.45);
   }
 
-  _handlePointerDown(e) {
+  private _handlePointerDown(e: PointerEvent): void {
     if (e.pointerType === 'mouse' && !this.pointerLocked && document.pointerLockElement !== this.canvas) {
       // Click-to-capture. If pointer lock is unavailable, drag-look below
       // still works.
@@ -108,7 +144,7 @@ export class FlightController {
     }
   }
 
-  _handlePointerMove(e) {
+  private _handlePointerMove(e: PointerEvent): void {
     if (!this.dragging || this.pointerLocked) return;
     const dx = e.clientX - this.lastPointerX;
     const dy = e.clientY - this.lastPointerY;
@@ -119,12 +155,12 @@ export class FlightController {
     this._takeControl(false);
   }
 
-  _handlePointerUp(e) {
+  private _handlePointerUp(e: PointerEvent): void {
     this.dragging = false;
     this.canvas.releasePointerCapture?.(e.pointerId);
   }
 
-  _takeControl(disableCruise = true) {
+  private _takeControl(disableCruise = true): void {
     if (disableCruise && this.autoCruise) {
       this.autoCruise = false;
       this.onAutoCruiseChange?.(false);
@@ -132,7 +168,7 @@ export class FlightController {
     this.onUserInput?.();
   }
 
-  setAutoCruise(on) {
+  setAutoCruise(on: boolean): void {
     this.autoCruise = on;
     if (on) {
       this.cruiseTime = 0;
@@ -140,20 +176,20 @@ export class FlightController {
     }
   }
 
-  setSpeed(speed) {
+  setSpeed(speed: number): void {
     this.speed = clamp(speed, 15, 500);
     this.onSpeedChange?.(this.speed);
   }
 
-  setPaused(paused) {
+  setPaused(paused: boolean): void {
     this.paused = paused;
   }
 
-  groundHeight() {
+  groundHeight(): number {
     return this.heightAt(this.x, this.z) * this.heightScale;
   }
 
-  reset() {
+  reset(): void {
     this.x = 0;
     this.z = 0;
     this.yaw = 0.35;
@@ -162,14 +198,14 @@ export class FlightController {
     this.cruiseTime = 0;
   }
 
-  warpTo(x, z, y = null) {
+  warpTo(x: number, z: number, y: number | null = null): void {
     this.x = x;
     this.z = z;
     this.y = y === null ? this.groundHeight() + 220 : y;
     this.cruiseTime = 0;
   }
 
-  update(dt) {
+  update(dt: number): void {
     if (this.paused) return;
 
     const ground = this.groundHeight();
@@ -220,13 +256,13 @@ export class FlightController {
     if (this.y > 9000) this.y = 9000;
   }
 
-  applyCamera(camera, origin) {
+  applyCamera(camera: THREE.PerspectiveCamera, origin: THREE.Vector2): void {
     // renderOrigin is a Vector2: x and y are world x/z.
     camera.position.set(this.x - origin.x, this.y, this.z - origin.y);
     camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
   }
 
-  getInfo() {
+  getInfo(): FlightInfo {
     return {
       x: this.x,
       z: this.z,
@@ -239,7 +275,7 @@ export class FlightController {
     };
   }
 
-  dispose() {
+  dispose(): void {
     window.removeEventListener('keydown', this._onKeyDown);
     window.removeEventListener('keyup', this._onKeyUp);
     window.removeEventListener('mousemove', this._onMouseMove);

@@ -1,18 +1,25 @@
 #!/usr/bin/env node
 /**
- * Pixel-statistics checks for tools/screenshot-infinite.mjs output.
+ * Pixel-statistics checks for tools/screenshot-infinite.ts output.
  *
- * Usage: node tools/analyze-infinite.mjs [shotsDir=shots-infinite]
+ * Usage: node tools/analyze-infinite.ts [shotsDir=shots-infinite]
  */
 
 import { PNG } from 'pngjs';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 
-const dir = process.argv[2] ?? 'shots-infinite';
-const load = (name) => PNG.sync.read(readFileSync(`${dir}/${name}`));
+interface RegionStats {
+  mean: number;
+  std: number;
+  hf: number;
+  dark: number;
+}
 
-function regionStats(img, x0, y0, x1, y1) {
-  let n = 0, sum = 0, sumSq = 0, prev = null, hf = 0, dark = 0;
+const dir = process.argv[2] ?? 'shots-infinite';
+const load = (name: string): PNG => PNG.sync.read(readFileSync(`${dir}/${name}`));
+
+function regionStats(img: PNG, x0: number, y0: number, x1: number, y1: number): RegionStats {
+  let n = 0, sum = 0, sumSq = 0, prev: number | null = null, hf = 0, dark = 0;
   for (let y = y0; y < y1; y += 2) {
     for (let x = x0; x < x1; x += 2) {
       const i = (y * img.width + x) * 4;
@@ -36,18 +43,18 @@ function regionStats(img, x0, y0, x1, y1) {
 }
 
 let failures = 0;
-const check = (name, ok, detail) => {
+const check = (name: string, ok: boolean, detail?: string): void => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${detail ?? ''}`);
   if (!ok) failures++;
 };
 
 if (existsSync(`${dir}/console.json`)) {
-  const { errors } = JSON.parse(readFileSync(`${dir}/console.json`, 'utf8'));
+  const { errors } = JSON.parse(readFileSync(`${dir}/console.json`, 'utf8')) as { errors: string[] };
   check('no page/console errors', errors.length === 0, `(${errors.length})`);
   if (errors.length) console.log(errors.join('\n'));
 }
 
-const files = readdirSync(dir).filter(f => f.endsWith('.png')).sort();
+const files = readdirSync(dir).filter((f) => f.endsWith('.png')).sort();
 for (const f of files) {
   const img = load(f);
   const sky = regionStats(img, 120, 100, 1100, 240);

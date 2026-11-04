@@ -10,16 +10,37 @@
  * at shared sample positions.
  */
 
-import { makeTerrainComposer } from '../terrain-compose.js';
+import { makeTerrainComposer } from '../terrain-compose.ts';
 
 export const DEFAULT_SEED = 20260217;
 export const DEFAULT_HEIGHT_SCALE = 1500; // metres of relief for h in [0,1]
+
+export interface HeightField {
+  readonly seed: number;
+  readonly heightScale: number;
+  heightAt(x: number, z: number): number;
+}
+
+export interface GenerateTileOptions {
+  level: number;
+  tx: number;
+  ty: number;
+  tileSize?: number;
+  baseSpacing?: number;
+  heightScale?: number;
+  normalScale?: number;
+}
+
+export interface GeneratedTile {
+  heights: Float32Array;
+  normals: Uint8Array;
+}
 
 /**
  * Creates a seeded, effectively infinite height function.
  *
  * The composition (multi-noise channels + spline response curves + iterated
- * domain warp + anisotropic ridge spines) lives in src/terrain-compose.js;
+ * domain warp + anisotropic ridge spines) lives in src/terrain-compose.ts;
  * see docs/TERRAIN_RESEARCH.md for the recipe and its sources. A pure-function
  * height field is what makes the streaming cache work: no global passes
  * (e.g. erosion simulation) are possible without seams, so the variety comes
@@ -29,7 +50,7 @@ export const DEFAULT_HEIGHT_SCALE = 1500; // metres of relief for h in [0,1]
  * The same object can be created in the worker and on the main thread; as
  * long as the seed matches, both evaluate the same field.
  */
-export function makeHeightField(seed = DEFAULT_SEED) {
+export function makeHeightField(seed = DEFAULT_SEED): HeightField {
   const { heightAt } = makeTerrainComposer({
     seed,
     warpWavelength: 5900,
@@ -63,13 +84,18 @@ export function makeHeightField(seed = DEFAULT_SEED) {
 /**
  * Bakes a tile of object-space normals from a float height patch.
  *
- * @param {Float32Array} heightsHalo (tileSize+2)^2, row-major, one-sample halo
- * @param {number} tileSize         samples per side of the output tile
- * @param {number} spacing          metres between samples
- * @param {number} heightScale      metres for heights going 0 -> 1
- * @returns {Uint8Array} tileSize^2 * 4, RGBA8 (R=N.x, G=N.z, B=N.y)
+ * @param heightsHalo (tileSize+2)^2, row-major, one-sample halo
+ * @param tileSize    samples per side of the output tile
+ * @param spacing     metres between samples
+ * @param heightScale metres for heights going 0 -> 1
+ * @returns tileSize^2 * 4, RGBA8 (R=N.x, G=N.z, B=N.y)
  */
-export function bakeTileNormals(heightsHalo, tileSize, spacing, heightScale) {
+export function bakeTileNormals(
+  heightsHalo: Float32Array,
+  tileSize: number,
+  spacing: number,
+  heightScale: number,
+): Uint8Array {
   const out = new Uint8Array(tileSize * tileSize * 4);
   const stride = tileSize + 2;
   const gradScale = heightScale / (8 * spacing);
@@ -117,20 +143,21 @@ export function bakeTileNormals(heightsHalo, tileSize, spacing, heightScale) {
  * with spacing S_L = baseSpacing * 2^L.
  *
  * Normal maps are baked at `normalScale` times the height-tile resolution
- * (default 2x), so they can carry detail below the clipmap vertex spacing.
- * Both tiles cover the same world square.
- *
- * @returns {{heights: Float32Array, normals: Uint8Array}}
+ * (default 1x here; the infinite page passes 8x), so they can carry detail
+ * below the clipmap vertex spacing. Both tiles cover the same world square.
  */
-export function generateTile(heightField, {
-  level,
-  tx,
-  ty,
-  tileSize = 64,
-  baseSpacing = 8,
-  heightScale = DEFAULT_HEIGHT_SCALE,
-  normalScale = 1,
-}) {
+export function generateTile(
+  heightField: HeightField,
+  {
+    level,
+    tx,
+    ty,
+    tileSize = 64,
+    baseSpacing = 8,
+    heightScale = DEFAULT_HEIGHT_SCALE,
+    normalScale = 1,
+  }: GenerateTileOptions,
+): GeneratedTile {
   const spacing = baseSpacing * Math.pow(2, level);
   const normalRes = tileSize * normalScale;
   const normalSpacing = spacing / normalScale;

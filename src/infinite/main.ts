@@ -16,19 +16,21 @@
  */
 
 import * as THREE from 'three';
-import { makeHeightField, DEFAULT_SEED, DEFAULT_HEIGHT_SCALE } from './heightfield.js';
-import { buildCenterInstances, buildRingInstances } from './clipmap.js';
-import { snapLevelOrigins } from './origins.js';
-import { TileStreamer } from './tiles.js';
+import { makeHeightField, DEFAULT_SEED, DEFAULT_HEIGHT_SCALE } from './heightfield.ts';
+import type { HeightField } from './heightfield.ts';
+import { buildCenterInstances, buildRingInstances } from './clipmap.ts';
+import { snapLevelOrigins } from './origins.ts';
+import { TileStreamer } from './tiles.ts';
 import {
   terrainVertexShader,
   terrainFragmentShader,
   debugVertexShader,
   debugFragmentShader,
-} from './shaders.js';
-import { skyVertexShader, skyFragmentShader } from '../sky-shaders.js';
-import { FlightController } from './flight.js';
-import { initUI } from './ui.js';
+} from './shaders.ts';
+import { skyVertexShader, skyFragmentShader } from '../sky-shaders.ts';
+import { FlightController } from './flight.ts';
+import { initUI } from './ui.ts';
+import type { UIApi } from './ui.ts';
 
 const CONFIG = {
   seed: DEFAULT_SEED,
@@ -41,7 +43,7 @@ const CONFIG = {
   heightScale: DEFAULT_HEIGHT_SCALE,
   skirtDepth: 420,      // metres of horizon skirt
   morphCells: 3,        // outer cells of each ring blended into the next LOD
-};
+} as const;
 
 const OUTER_EXTENT = 2 * CONFIG.centerCells * CONFIG.baseSpacing * Math.pow(2, CONFIG.levels - 1);
 const CACHE_SIZE = CONFIG.cacheTiles * CONFIG.tileSize;
@@ -63,7 +65,83 @@ const PHASE_WRAP = CONFIG.cacheTiles * CONFIG.tileSize * CONFIG.baseSpacing
 // divisor of PHASE_WRAP so the toroidal phase survives a rebase.
 const RENDER_ORIGIN_STEP = CONFIG.baseSpacing * Math.pow(2, CONFIG.levels + 1);
 
-const state = {
+interface AppState {
+  sunAz: number;
+  sunEl: number;
+  normalStrength: number;
+  wireframe: boolean;
+  lodDebug: boolean;
+  autoCruise: boolean;
+}
+
+interface OriginTarget {
+  geo: THREE.InstancedBufferGeometry;
+  levels: number[];
+}
+
+type TerrainUniforms = {
+  uHeightArray: THREE.IUniform<THREE.DataArrayTexture>;
+  uNormalArray: THREE.IUniform<THREE.DataArrayTexture>;
+  uHeightScale: THREE.IUniform<number>;
+  uRenderOrigin: THREE.IUniform<THREE.Vector2>;
+  uBaseSpacing: THREE.IUniform<number>;
+  uTileCells: THREE.IUniform<number>;
+  uNormalTileCells: THREE.IUniform<number>;
+  uCacheTiles: THREE.IUniform<number>;
+  uSkirtDepth: THREE.IUniform<number>;
+  uLevels: THREE.IUniform<number>;
+  uCenterCells: THREE.IUniform<number>;
+  uMorphCells: THREE.IUniform<number>;
+  uPixelScale: THREE.IUniform<number>;
+  uNormalStrength: THREE.IUniform<number>;
+  uSunDirection: THREE.IUniform<THREE.Vector3>;
+  uSunColor: THREE.IUniform<THREE.Color>;
+  uSkyColor: THREE.IUniform<THREE.Color>;
+  uGroundColor: THREE.IUniform<THREE.Color>;
+  uFogColor: THREE.IUniform<THREE.Color>;
+  uFogDensity: THREE.IUniform<number>;
+  uSnowStart: THREE.IUniform<number>;
+  uGrassStrength: THREE.IUniform<number>;
+  uSandStrength: THREE.IUniform<number>;
+  uSpecular: THREE.IUniform<number>;
+  uDebugLod: THREE.IUniform<number>;
+  uDebugTiles: THREE.IUniform<number>;
+};
+
+type SkyUniforms = {
+  uZenith: THREE.IUniform<THREE.Color>;
+  uHorizon: THREE.IUniform<THREE.Color>;
+  uSunDirection: THREE.IUniform<THREE.Vector3>;
+  uSunColor: THREE.IUniform<THREE.Color>;
+};
+
+export interface InfiniteQA {
+  config: typeof CONFIG;
+  renderer: THREE.WebGLRenderer;
+  scene: THREE.Scene;
+  camera: THREE.PerspectiveCamera;
+  flight: FlightController;
+  streamer: TileStreamer;
+  readonly state: AppState & { renderOrigin: number[] };
+  setPaused(paused: boolean): void;
+  setAutoCruise(on: boolean): void;
+  setLodDebug(on: boolean): void;
+  setTileDebug(on: boolean): void;
+  setWireframe(on: boolean): void;
+  setCrackDebug(on: boolean): void;
+  waitForTiles(): Promise<void>;
+  warpTo(x: number, z: number, y?: number | null): Promise<void>;
+  groundHeight(): number;
+  getLevelOrigins(): { x: number; z: number; origins: number[] };
+}
+
+declare global {
+  interface Window {
+    __infinite: InfiniteQA;
+  }
+}
+
+const state: AppState = {
   sunAz: 305,
   sunEl: 34,
   normalStrength: 1,
@@ -76,30 +154,52 @@ const renderOrigin = new THREE.Vector2(0, 0);
 // Absolute world x/z per level, refreshed every frame from the camera.
 const levelOrigins = new Float64Array(CONFIG.levels * 2);
 
-let renderer, scene, camera, sky, skyMat;
-let terrainMat, debugMat, debugGroup;
-let centerMesh, innerRingMesh, outerRingMesh;
-let originTargets;
-let heightField, flight, streamer, ui;
-let heightTexture, normalTexture;
-let heightType;
+let renderer!: THREE.WebGLRenderer;
+let scene!: THREE.Scene;
+let camera!: THREE.PerspectiveCamera;
+let sky!: THREE.Mesh;
+let skyMat!: THREE.ShaderMaterial;
+let terrainMat!: THREE.ShaderMaterial;
+let debugMat!: THREE.ShaderMaterial;
+let debugGroup!: THREE.Group;
+let centerMesh!: THREE.Mesh;
+let innerRingMesh!: THREE.Mesh;
+let outerRingMesh!: THREE.Mesh;
+let originTargets: OriginTarget[] = [];
+let heightField!: HeightField;
+let flight!: FlightController;
+let streamer!: TileStreamer;
+let ui!: UIApi;
+let heightTexture!: THREE.DataArrayTexture;
+let normalTexture!: THREE.DataArrayTexture;
+let heightType!: THREE.TextureDataType;
+let terrainUniforms!: TerrainUniforms;
+let skyUniforms!: SkyUniforms;
 
 let lastFrame = performance.now();
 let frames = 0;
 let lastStats = performance.now();
 
-const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
-const formatCount = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
-const wrapPhase = (v, m) => ((v % m) + m) % m;
+const nextFrame = (): Promise<void> => new Promise((resolve) => {
+  requestAnimationFrame(() => { setTimeout(resolve, 0); });
+});
+const formatCount = (n: number): string =>
+  (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
+const wrapPhase = (v: number, m: number): number => ((v % m) + m) % m;
 const bufferSize = new THREE.Vector2();
 
 /** Radians of view per fragment; drives the ring-boundary trim slack. */
-function pixelScale() {
+function pixelScale(): number {
   renderer.getDrawingBufferSize(bufferSize);
   return (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / Math.max(1, bufferSize.y);
 }
 
-async function boot() {
+function setCheckbox(id: string, checked: boolean): void {
+  const el = document.getElementById(id);
+  if (el instanceof HTMLInputElement) el.checked = checked;
+}
+
+async function boot(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const startCruise = params.get('cruise') !== '0';
 
@@ -107,15 +207,15 @@ async function boot() {
     onSunChange: (az, el) => { state.sunAz = az; state.sunEl = el; updateSun(); },
     onNormalStrength: (s) => {
       state.normalStrength = s;
-      if (terrainMat) terrainMat.uniforms.uNormalStrength.value = s;
+      if (terrainMat) terrainUniforms.uNormalStrength.value = s;
     },
     onWireframe: (on) => { state.wireframe = on; if (debugGroup) debugGroup.visible = on; },
     onLodDebug: (on) => {
       state.lodDebug = on;
-      if (terrainMat) terrainMat.uniforms.uDebugLod.value = on ? 1 : 0;
+      if (terrainMat) terrainUniforms.uDebugLod.value = on ? 1 : 0;
     },
     onTileDebug: (on) => {
-      if (terrainMat) terrainMat.uniforms.uDebugTiles.value = on ? 1 : 0;
+      if (terrainMat) terrainUniforms.uDebugTiles.value = on ? 1 : 0;
     },
     onAutoCruise: (on) => {
       state.autoCruise = on;
@@ -187,8 +287,9 @@ async function boot() {
   animate();
 }
 
-function initRenderer() {
+function initRenderer(): void {
   const canvas = document.getElementById('scene');
+  if (!(canvas instanceof HTMLCanvasElement)) throw new Error('missing #scene canvas');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -200,17 +301,18 @@ function initRenderer() {
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 2, OUTER_EXTENT * 1.5);
   camera.rotation.order = 'YXZ';
 
+  skyUniforms = {
+    uZenith: { value: new THREE.Color(0.20, 0.42, 0.72) },
+    uHorizon: { value: new THREE.Color(0.68, 0.78, 0.88) },
+    uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
+    uSunColor: { value: new THREE.Color(1, 0.97, 0.9) },
+  };
   skyMat = new THREE.ShaderMaterial({
     vertexShader: skyVertexShader,
     fragmentShader: skyFragmentShader,
     side: THREE.BackSide,
     depthWrite: false,
-    uniforms: {
-      uZenith: { value: new THREE.Color(0.20, 0.42, 0.72) },
-      uHorizon: { value: new THREE.Color(0.68, 0.78, 0.88) },
-      uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
-      uSunColor: { value: new THREE.Color(1, 0.97, 0.9) },
-    },
+    uniforms: skyUniforms,
   });
 
   sky = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), skyMat);
@@ -222,7 +324,7 @@ function initRenderer() {
   window.addEventListener('resize', onResize);
 }
 
-function createTextures() {
+function createTextures(): void {
   // R16F is core-filterable in WebGL2. The half-float step is well below the
   // 16 m vertex spacing.
   heightType = THREE.HalfFloatType;
@@ -258,13 +360,13 @@ function createTextures() {
 
   // The CPU-side buffers are only needed for the initial allocation; every
   // tile after this is uploaded straight to the GPU. Freeing them keeps the
-  // 8x normal cache from costing another ~66 MB on the JS heap.
-  heightTexture.image.data = null;
-  normalTexture.image.data = null;
+  // 8x normal cache from costing another ~160 MiB on the JS heap.
+  (heightTexture.image as { data: Uint16Array | null }).data = null;
+  (normalTexture.image as { data: Uint8Array | null }).data = null;
 }
 
-function buildScene() {
-  const uniforms = {
+function buildScene(): void {
+  terrainUniforms = {
     uHeightArray: { value: heightTexture },
     uNormalArray: { value: normalTexture },
     uHeightScale: { value: CONFIG.heightScale },
@@ -296,14 +398,14 @@ function buildScene() {
   terrainMat = new THREE.ShaderMaterial({
     vertexShader: terrainVertexShader,
     fragmentShader: terrainFragmentShader,
-    uniforms,
+    uniforms: terrainUniforms,
     side: THREE.FrontSide,
   });
 
   debugMat = new THREE.ShaderMaterial({
     vertexShader: debugVertexShader,
     fragmentShader: debugFragmentShader,
-    uniforms: terrainMat.uniforms,
+    uniforms: terrainUniforms,
     wireframe: true,
     transparent: true,
     depthWrite: false,
@@ -346,7 +448,7 @@ function buildScene() {
 
   debugGroup = new THREE.Group();
   debugGroup.name = 'debug-group';
-  for (const [geo, name] of [[centerGeo, 'center'], [innerGeo, 'ring-0'], [outerGeo, 'rings']]) {
+  for (const [geo, name] of [[centerGeo, 'center'], [innerGeo, 'ring-0'], [outerGeo, 'rings']] as const) {
     const m = new THREE.Mesh(geo, debugMat);
     m.frustumCulled = false;
     m.name = `debug-${name}`;
@@ -356,7 +458,7 @@ function buildScene() {
   scene.add(debugGroup);
 }
 
-function updateSun() {
+function updateSun(): void {
   if (!terrainMat || !skyMat) return;
 
   const az = THREE.MathUtils.degToRad(state.sunAz);
@@ -364,7 +466,7 @@ function updateSun() {
   const dir = new THREE.Vector3(
     Math.sin(az) * Math.cos(el),
     Math.sin(el),
-    -Math.cos(az) * Math.cos(el)
+    -Math.cos(az) * Math.cos(el),
   ).normalize();
 
   const t = THREE.MathUtils.smoothstep(state.sunEl, 10, 42);
@@ -373,34 +475,41 @@ function updateSun() {
   const horizon = new THREE.Color(0.52, 0.72, 0.94).lerp(new THREE.Color(0.98, 0.50, 0.24), 1 - t);
   const ground = new THREE.Color(0.14, 0.10, 0.075).lerp(new THREE.Color(0.26, 0.25, 0.23), t);
 
-  const u = terrainMat.uniforms;
+  const u = terrainUniforms;
   u.uSunDirection.value.copy(dir);
   u.uSunColor.value.copy(sunColor);
   u.uSkyColor.value.copy(zenith);
   u.uGroundColor.value.copy(ground);
   u.uFogColor.value.copy(horizon);
 
-  skyMat.uniforms.uSunDirection.value.copy(dir);
-  skyMat.uniforms.uSunColor.value.copy(sunColor);
-  skyMat.uniforms.uZenith.value.copy(zenith);
-  skyMat.uniforms.uHorizon.value.copy(horizon);
+  skyUniforms.uSunDirection.value.copy(dir);
+  skyUniforms.uSunColor.value.copy(sunColor);
+  skyUniforms.uZenith.value.copy(zenith);
+  skyUniforms.uHorizon.value.copy(horizon);
 }
 
-function rebaseOrigin() {
+function rebaseOrigin(): void {
   const limit = 15000;
   if (Math.abs(flight.x - renderOrigin.x) > limit || Math.abs(flight.z - renderOrigin.y) > limit) {
     snapRenderOrigin();
   }
 }
 
-function snapRenderOrigin() {
+function snapRenderOrigin(): void {
   renderOrigin.set(
     Math.round(flight.x / RENDER_ORIGIN_STEP) * RENDER_ORIGIN_STEP,
-    Math.round(flight.z / RENDER_ORIGIN_STEP) * RENDER_ORIGIN_STEP
+    Math.round(flight.z / RENDER_ORIGIN_STEP) * RENDER_ORIGIN_STEP,
   );
 }
 
-function updateCamera() {
+function instancedAttribute(
+  geo: THREE.InstancedBufferGeometry,
+  name: string,
+): THREE.InstancedBufferAttribute {
+  return geo.getAttribute(name) as THREE.InstancedBufferAttribute;
+}
+
+function updateCamera(): void {
   flight.applyCamera(camera, renderOrigin);
 
   // Each level snaps to its own spacing: a ring is rigid between its snaps.
@@ -409,22 +518,22 @@ function updateCamera() {
 
   if (!terrainMat) return;
 
-  terrainMat.uniforms.uRenderOrigin.value.set(
+  terrainUniforms.uRenderOrigin.value.set(
     wrapPhase(renderOrigin.x, PHASE_WRAP),
-    wrapPhase(renderOrigin.y, PHASE_WRAP)
+    wrapPhase(renderOrigin.y, PHASE_WRAP),
   );
 
   for (const { geo, levels } of originTargets) {
-    const origins = geo.getAttribute('aOrigin');
-    const parents = geo.getAttribute('aParentOrigin');
-    const coarser = geo.getAttribute('aCoarseOrigin');
+    const origins = instancedAttribute(geo, 'aOrigin');
+    const parents = instancedAttribute(geo, 'aParentOrigin');
+    const coarser = instancedAttribute(geo, 'aCoarseOrigin');
 
     for (let i = 0; i < levels.length; i++) {
       const level = levels[i];
       origins.setXY(
         i,
         levelOrigins[level * 2] - renderOrigin.x,
-        levelOrigins[level * 2 + 1] - renderOrigin.y
+        levelOrigins[level * 2 + 1] - renderOrigin.y,
       );
 
       // Rings are clipped to the level inside them. Level 0's parent is the
@@ -433,7 +542,7 @@ function updateCamera() {
       parents.setXY(
         i,
         levelOrigins[parent * 2] - renderOrigin.x,
-        levelOrigins[parent * 2 + 1] - renderOrigin.y
+        levelOrigins[parent * 2 + 1] - renderOrigin.y,
       );
 
       // Morph target: the next-coarser level's own lattice.
@@ -441,7 +550,7 @@ function updateCamera() {
       coarser.setXY(
         i,
         levelOrigins[coarseLevel * 2] - renderOrigin.x,
-        levelOrigins[coarseLevel * 2 + 1] - renderOrigin.y
+        levelOrigins[coarseLevel * 2 + 1] - renderOrigin.y,
       );
     }
 
@@ -451,7 +560,7 @@ function updateCamera() {
   }
 }
 
-function resetView() {
+function resetView(): void {
   flight.reset();
   snapRenderOrigin();
   flight.setAutoCruise(state.autoCruise);
@@ -459,14 +568,14 @@ function resetView() {
   ui.toast('Position reset');
 }
 
-function onResize() {
+function onResize(): void {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight, false);
-  if (terrainMat) terrainMat.uniforms.uPixelScale.value = pixelScale();
+  if (terrainMat) terrainUniforms.uPixelScale.value = pixelScale();
 }
 
-function animate() {
+function animate(): void {
   requestAnimationFrame(animate);
 
   const now = performance.now();
@@ -501,13 +610,13 @@ function animate() {
       pos: `${(fi.x / 1000).toFixed(1)},${(fi.z / 1000).toFixed(1)}km`,
     });
     ui.setTileStatus(
-      `tiles: ${ts.resident} resident · ${ts.generated} generated · ${ts.queued + ts.inFlight} queued`
+      `tiles: ${ts.resident} resident · ${ts.generated} generated · ${ts.queued + ts.inFlight} queued`,
     );
   }
 }
 
-function setupQA() {
-  const qa = {
+function setupQA(): void {
+  const qa: InfiniteQA = {
     config: CONFIG,
     renderer,
     scene,
@@ -523,17 +632,17 @@ function setupQA() {
     },
     setLodDebug: (on) => {
       state.lodDebug = on;
-      terrainMat.uniforms.uDebugLod.value = on ? 1 : 0;
-      document.getElementById('lod-debug').checked = on;
+      terrainUniforms.uDebugLod.value = on ? 1 : 0;
+      setCheckbox('lod-debug', on);
     },
     setTileDebug: (on) => {
-      terrainMat.uniforms.uDebugTiles.value = on ? 1 : 0;
-      document.getElementById('tile-debug').checked = on;
+      terrainUniforms.uDebugTiles.value = on ? 1 : 0;
+      setCheckbox('tile-debug', on);
     },
     setWireframe: (on) => {
       state.wireframe = on;
       debugGroup.visible = on;
-      document.getElementById('wireframe').checked = on;
+      setCheckbox('wireframe', on);
     },
     // Hides the sky and clears to magenta: any magenta left *inside* the
     // terrain silhouette is a genuine geometry gap.
@@ -569,11 +678,12 @@ function setupQA() {
   }
 }
 
-boot().catch((err) => {
+boot().catch((err: unknown) => {
   console.error(err);
   const status = document.getElementById('loading-status');
   if (status) {
-    status.textContent = `Failed to start: ${err.message}`;
+    const message = err instanceof Error ? err.message : String(err);
+    status.textContent = `Failed to start: ${message}`;
     status.style.color = '#ff7d7d';
   }
 });

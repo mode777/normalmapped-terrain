@@ -8,11 +8,11 @@
  */
 
 import assert from 'node:assert/strict';
-import { makeHeightField, generateTile, bakeTileNormals } from '../src/infinite/heightfield.js';
-import { snapLevelOrigins } from '../src/infinite/origins.js';
+import { makeHeightField, generateTile, bakeTileNormals } from '../src/infinite/heightfield.ts';
+import { snapLevelOrigins } from '../src/infinite/origins.ts';
 
 const hf = makeHeightField(12345);
-const near = (a, b, eps, msg) => {
+const near = (a: number, b: number, eps: number, msg: string): void => {
   assert.ok(Math.abs(a - b) <= eps, `${msg}: ${a} vs ${b}`);
 };
 
@@ -136,7 +136,7 @@ const near = (a, b, eps, msg) => {
         l1.heights[j * tileSize + i],
         l0.heights[(j * 2) * tileSize + i * 2],
         1e-6,
-        `LOD height ${i},${j}`
+        `LOD height ${i},${j}`,
       );
     }
   }
@@ -160,7 +160,7 @@ const near = (a, b, eps, msg) => {
     assert.ok(Math.abs(oz - camZ) <= s / 2 + 1e-9, `L${level} z within half a cell`);
   }
 
-  // Adjacent rings may only differ by half a coarse cell; clipmap.js relies
+  // Adjacent rings may only differ by half a coarse cell; clipmap.ts relies
   // on that bound to cover the parent square with a C-1 hole.
   for (let level = 1; level < levels; level++) {
     const s = baseSpacing * 2 ** level;

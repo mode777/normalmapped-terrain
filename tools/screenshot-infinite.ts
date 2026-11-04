@@ -4,13 +4,16 @@
 //   npm install --no-save puppeteer-core
 //
 // Usage:
-//   node tools/screenshot-infinite.mjs --url http://127.0.0.1:4173/infinite.html --out shots-infinite
-//   node tools/screenshot-infinite.mjs --url https://mode777.github.io/normalmapped-terrain/infinite.html --out live-infinite
+//   node tools/screenshot-infinite.ts --url http://127.0.0.1:4173/infinite.html --out shots-infinite
+//   node tools/screenshot-infinite.ts --url https://mode777.github.io/normalmapped-terrain/infinite.html --out live-infinite
+//
+// This optional driver is excluded from `tsc --noEmit` because puppeteer-core
+// is not a dependency of the app; install it before type-checking or running.
 
 import puppeteer from 'puppeteer-core';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
-const arg = (name, def) => {
+const arg = (name: string, def: string): string => {
   const i = process.argv.indexOf(`--${name}`);
   return i > 0 ? process.argv[i + 1] : def;
 };
@@ -20,9 +23,9 @@ const OUT = arg('out', 'shots-infinite');
 const CHROME = arg('chrome', process.env.CHROME_SHELL_PATH ||
   '/home/devuser/browsers/chrome-headless-shell/linux-131.0.6778.264/chrome-headless-shell-linux64/chrome-headless-shell');
 
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const messages = [];
-const errors = [];
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const messages: string[] = [];
+const errors: string[] = [];
 
 mkdirSync(OUT, { recursive: true });
 
@@ -34,12 +37,12 @@ const browser = await puppeteer.launch({
 });
 
 const page = await browser.newPage();
-page.on('console', m => {
+page.on('console', (m) => {
   messages.push(`[${m.type()}] ${m.text()}`);
   if (m.type() === 'error') errors.push(`CONSOLE: ${m.text()}`);
 });
-page.on('pageerror', e => errors.push(`PAGEERROR: ${e.message}`));
-page.on('requestfailed', r => errors.push(`REQFAIL: ${r.url()} ${r.failure()?.errorText}`));
+page.on('pageerror', (e) => errors.push(`PAGEERROR: ${e.message}`));
+page.on('requestfailed', (r) => errors.push(`REQFAIL: ${r.url()} ${r.failure()?.errorText}`));
 
 const url = new URL(TARGET);
 url.searchParams.set('cruise', '0');
@@ -77,7 +80,7 @@ const read = () => page.evaluate(() => {
   };
 });
 
-const shot = async (name) => {
+const shot = async (name: string): Promise<void> => {
   await sleep(600);
   await page.screenshot({ path: `${OUT}/${name}.png` });
 };
@@ -87,14 +90,14 @@ await shot('01-default');
 
 // Same pose, flat normal: isolates the normal map's contribution.
 await page.evaluate(() => {
-  const s = document.getElementById('normal-strength');
+  const s = document.getElementById('normal-strength') as HTMLInputElement;
   s.value = '0';
   s.dispatchEvent(new Event('input', { bubbles: true }));
 });
 await shot('02-normal0');
 
 await page.evaluate(() => {
-  const s = document.getElementById('normal-strength');
+  const s = document.getElementById('normal-strength') as HTMLInputElement;
   s.value = '1';
   s.dispatchEvent(new Event('input', { bubbles: true }));
 });

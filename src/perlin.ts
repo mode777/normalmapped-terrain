@@ -6,7 +6,7 @@
  * physical size independent of the heightfield resolution.
  */
 
-function mulberry32(seed) {
+function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return function () {
     a |= 0; a = (a + 0x6d2b79f5) | 0;
@@ -17,6 +17,8 @@ function mulberry32(seed) {
 }
 
 export class Perlin {
+  readonly perm: Uint8Array;
+
   constructor(seed = 1337) {
     const rand = mulberry32(seed);
     const p = new Uint8Array(256);
@@ -29,10 +31,10 @@ export class Perlin {
     for (let i = 0; i < 512; i++) this.perm[i] = p[i & 255];
   }
 
-  static fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
-  static lerp(a, b, t) { return a + t * (b - a); }
+  static fade(t: number): number { return t * t * t * (t * (t * 6 - 15) + 10); }
+  static lerp(a: number, b: number, t: number): number { return a + t * (b - a); }
 
-  static grad(hash, x, y) {
+  static grad(hash: number, x: number, y: number): number {
     // 8 gradient directions packed into the low 3 bits
     switch (hash & 7) {
       case 0: return x + y;
@@ -47,7 +49,7 @@ export class Perlin {
   }
 
   /** 2D noise in [-1, 1] */
-  noise2(x, y) {
+  noise2(x: number, y: number): number {
     const X = Math.floor(x) & 255;
     const Y = Math.floor(y) & 255;
     const xf = x - Math.floor(x);
@@ -65,7 +67,7 @@ export class Perlin {
   }
 
   /** Classical fractional Brownian motion. Returns roughly [-1, 1]. */
-  fbm(x, y, octaves = 6, lacunarity = 2.0, gain = 0.5) {
+  fbm(x: number, y: number, octaves = 6, lacunarity = 2.0, gain = 0.5): number {
     let sum = 0;
     let amp = 1;
     let norm = 0;
@@ -81,7 +83,7 @@ export class Perlin {
   }
 
   /** Ridged multifractal — sharp crests, good for mountain ranges. Returns [0, ~1.4]. */
-  ridged(x, y, octaves = 7, lacunarity = 2.0, gain = 0.5) {
+  ridged(x: number, y: number, octaves = 7, lacunarity = 2.0, gain = 0.5): number {
     let sum = 0;
     let amp = 0.55;
     let prev = 1;

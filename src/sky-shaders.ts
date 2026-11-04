@@ -6,7 +6,7 @@
  * frame.
  */
 
-export const skyVertexShader = /* glsl */ `
+export const skyVertexShader: string = /* glsl */ `
   varying vec3 vWorldPos;
   void main() {
     vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
@@ -14,7 +14,7 @@ export const skyVertexShader = /* glsl */ `
   }
 `;
 
-export const skyFragmentShader = /* glsl */ `
+export const skyFragmentShader: string = /* glsl */ `
   uniform vec3 uZenith;
   uniform vec3 uHorizon;
   uniform vec3 uSunDirection;

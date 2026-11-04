@@ -5,7 +5,7 @@
  * [C*S_L, 2C*S_L] around its own snapped origin, with vertex spacing
  * S_L = S0*2^L.
  *
- * Origins are snapped per level (see origins.js), so neighbouring rings are
+ * Origins are snapped per level (see origins.ts), so neighbouring rings are
  * not exactly concentric: the finer ring can be off-centre by up to half a
  * coarse cell. Two things absorb that:
  *
@@ -15,7 +15,7 @@
  *   - the level-0 ring shares the centre block's lattice, so it abuts the
  *     centre exactly and is not clipped at all.
  *
- * The outer band of each ring morphs to the next-coarse height (shaders.js),
+ * The outer band of each ring morphs to the next-coarse height (shaders.ts),
  * so the two sides of that boundary describe the same surface even though
  * the rings snap at different times.
  *
@@ -27,15 +27,13 @@
 import * as THREE from 'three';
 
 class Builder {
-  constructor() {
-    this.positions = [];
-    this.skirt = [];
-    this.indices = [];
-    this.map = new Map();
-  }
+  readonly positions: number[] = [];
+  readonly skirt: number[] = [];
+  readonly indices: number[] = [];
+  readonly map = new Map<string, number>();
 
   /** Shared terrain vertex at cell (i,j). */
-  vertex(i, j) {
+  vertex(i: number, j: number): number {
     const key = `${i},${j}`;
     let idx = this.map.get(key);
     if (idx === undefined) {
@@ -48,19 +46,19 @@ class Builder {
   }
 
   /** Duplicated vertex for a skirt face. */
-  raw(i, j, skirt) {
+  raw(i: number, j: number, skirt: number): number {
     const idx = this.positions.length / 3;
     this.positions.push(i, 0, j);
     this.skirt.push(skirt);
     return idx;
   }
 
-  tri(a, b, c) {
+  tri(a: number, b: number, c: number): void {
     this.indices.push(a, b, c);
   }
 }
 
-function makeGeometry(builder) {
+function makeGeometry(builder: Builder): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(builder.positions), 3));
   g.setAttribute('aSkirt', new THREE.BufferAttribute(new Float32Array(builder.skirt), 1));
@@ -74,7 +72,12 @@ function makeGeometry(builder) {
  * parent's outer square) and the next coarser origin (the morph target).
  * All three are refreshed each frame.
  */
-function toInstanced(base, levels, outer, trim) {
+function toInstanced(
+  base: THREE.BufferGeometry,
+  levels: readonly number[],
+  outer: readonly number[],
+  trim: readonly number[],
+): THREE.InstancedBufferGeometry {
   const g = new THREE.InstancedBufferGeometry();
   g.index = base.index;
   for (const name of Object.keys(base.attributes)) {
@@ -99,7 +102,7 @@ function toInstanced(base, levels, outer, trim) {
 }
 
 /** Solid centre block, half-extent `centerCells` cells, one instance at LOD 0. */
-export function buildCenterInstances(centerCells) {
+export function buildCenterInstances(centerCells: number): THREE.InstancedBufferGeometry {
   const C = centerCells;
   const b = new Builder();
 
@@ -122,8 +125,8 @@ export function buildCenterInstances(centerCells) {
 }
 
 /** Perimeter loop of the square of radius R, in order, step 1. */
-function perimeterLoop(R) {
-  const loop = [];
+function perimeterLoop(R: number): Array<[number, number]> {
+  const loop: Array<[number, number]> = [];
   for (let i = -R; i <= R; i++) loop.push([i, -R]);           // top
   for (let j = -R + 1; j <= R; j++) loop.push([R, j]);        // right
   for (let i = R - 1; i >= -R; i--) loop.push([i, R]);        // bottom
@@ -140,7 +143,7 @@ function perimeterLoop(R) {
  * coarse cell. The level-0 ring shares the centre block's exact lattice, so
  * it uses C and abuts it with no clipping at all.
  */
-export function buildRingGeometry(centerCells, holeCells) {
+export function buildRingGeometry(centerCells: number, holeCells: number): THREE.BufferGeometry {
   const C = centerCells;
   const H = holeCells;
   const R = 2 * C;
@@ -183,17 +186,27 @@ export function buildRingGeometry(centerCells, holeCells) {
   return makeGeometry(b);
 }
 
+export interface BuildRingInstancesOptions {
+  hole?: number;
+  trim?: number;
+  outerLevel?: number;
+}
+
 /**
  * Instances one ring footprint for a list of LODs.
  *
  * `trim` enables the fragment-shader clip to the parent square; only the
  * level-0 ring leaves it off (it abuts the centre block on the same lattice).
  */
-export function buildRingInstances(centerCells, levelList, {
-  hole = centerCells - 1,
-  trim = 1,
-  outerLevel = -1,
-} = {}) {
+export function buildRingInstances(
+  centerCells: number,
+  levelList: readonly number[],
+  {
+    hole = centerCells - 1,
+    trim = 1,
+    outerLevel = -1,
+  }: BuildRingInstancesOptions = {},
+): THREE.InstancedBufferGeometry {
   const base = buildRingGeometry(centerCells, hole);
   const outer = levelList.map((level) => (level === outerLevel ? 1 : 0));
   return toInstanced(base, levelList, outer, levelList.map(() => trim));

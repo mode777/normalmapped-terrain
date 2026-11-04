@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": [
+    "tools/test-infinite.ts",
+    "tools/analyze-infinite.ts",
+    "vite.config.ts"
+  ]
+}

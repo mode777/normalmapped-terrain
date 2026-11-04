@@ -4,17 +4,25 @@
   "description": "PoC: infinite Three.js clipmap terrain with vertex-shader height displacement and normal maps streamed from a toroidal tile cache",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "test:infinite": "node tools/test-infinite.mjs"
+    "test:infinite": "node tools/test-infinite.ts"
   },
   "dependencies": {
     "three": "^0.180.0"
   },
   "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/pngjs": "^6.0.5",
+    "@types/three": "^0.180.0",
     "pngjs": "^7.0.0",
+    "typescript": "^5.9.3",
     "vite": "^7.0.0"
   }
 }

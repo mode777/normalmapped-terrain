@@ -22,7 +22,7 @@
  * origin, which keeps precision stable across floating-origin rebases.
  */
 
-export const terrainVertexShader = /* glsl */ `
+export const terrainVertexShader: string = /* glsl */ `
   uniform sampler2DArray uHeightArray;
   uniform float uHeightScale;
   uniform vec2 uRenderOrigin;
@@ -129,7 +129,7 @@ export const terrainVertexShader = /* glsl */ `
   }
 `;
 
-export const terrainFragmentShader = /* glsl */ `
+export const terrainFragmentShader: string = /* glsl */ `
   // tonemapping_pars_fragment / colorspace_pars_fragment are auto-injected
   // by three.js; do not include the *_pars chunks again.
 
@@ -288,9 +288,9 @@ export const terrainFragmentShader = /* glsl */ `
   }
 `;
 
-export const debugVertexShader = terrainVertexShader;
+export const debugVertexShader: string = terrainVertexShader;
 
-export const debugFragmentShader = /* glsl */ `
+export const debugFragmentShader: string = /* glsl */ `
   uniform float uLevels;
   uniform float uBaseSpacing;
   uniform float uCenterCells;

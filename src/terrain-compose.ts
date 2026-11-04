@@ -1,7 +1,7 @@
 /**
  * Shared terrain composition: multi-noise channels mapped through spline
  * response curves, iterated domain warping and anisotropic mountain
- * "spines". Used by the infinite heightfield (src/infinite/heightfield.js).
+ * "spines". Used by the infinite heightfield (src/infinite/heightfield.ts).
  *
  * Why not plain fBM: summed octaves are statistically the same everywhere —
  * rounded hills, no plains-vs-peaks contrast, no directed structure. See
@@ -23,10 +23,42 @@
  * 1 / wavelength.
  */
 
-import { Perlin } from './perlin.js';
+import { Perlin } from './perlin.ts';
 
-const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
-const smoothstep = (a, b, x) => {
+export type SplinePoint = readonly [number, number];
+
+export interface DetailLayer {
+  wavelength: number;
+  amplitude: number;
+  octaves?: number;
+}
+
+export interface TerrainComposerOptions {
+  seed: number;
+  warpWavelength?: number;
+  warpAmplitude?: number;
+  continentWavelength?: number;
+  erosionWavelength?: number;
+  mountainWavelength?: number;
+  mountainOctaves?: number;
+  spineWavelength?: number;
+  spineAnisotropy?: number;
+  hillsWavelength?: number;
+  hillsOctaves?: number;
+  roughnessWavelength?: number;
+  mountainAmp?: number;
+  hillsAmp?: number;
+  baseCurve?: (x: number) => number;
+  reliefCurve?: (x: number) => number;
+  detailLayers?: readonly DetailLayer[];
+}
+
+export interface TerrainComposer {
+  heightAt(x: number, z: number): number;
+}
+
+const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+const smoothstep = (a: number, b: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
@@ -39,7 +71,7 @@ const smoothstep = (a, b, x) => {
  * features actually reach their extremes; the clamp cost is a few percent
  * of saturated area, which reads as basins/plateaus rather than artifacts.
  */
-const expand01 = (v, k) => clamp01(0.5 + (v - 0.5) * k);
+const expand01 = (v: number, k: number): number => clamp01(0.5 + (v - 0.5) * k);
 
 /**
  * Monotone cubic Hermite spline (Fritsch–Carlson tangents) through the
@@ -51,14 +83,14 @@ const expand01 = (v, k) => clamp01(0.5 + (v - 0.5) * k);
  * smooth noise channel into terrain height with drama that the raw noise
  * amplitude profile cannot produce.
  *
- * @param {number[][]} points [[x0,y0],[x1,y1],…] at least 2, any order
- * @returns {(x: number) => number}
+ * @param points [[x0,y0],[x1,y1],…] at least 2, any order
+ * @returns response curve
  */
-export function createSpline(points) {
+export function createSpline(points: readonly SplinePoint[]): (x: number) => number {
   const pts = points.filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]))
     .sort((a, b) => a[0] - b[0]);
   // drop duplicate-x control points (zero-width segments break the tangents)
-  const clean = [];
+  const clean: SplinePoint[] = [];
   for (const p of pts) {
     if (!clean.length || p[0] > clean[clean.length - 1][0]) clean.push(p);
   }
@@ -67,14 +99,14 @@ export function createSpline(points) {
 
   const xs = clean.map((p) => p[0]);
   const ys = clean.map((p) => p[1]);
-  const dxs = new Array(n - 1);
-  const ms = new Array(n - 1);
+  const dxs: number[] = new Array(n - 1);
+  const ms: number[] = new Array(n - 1);
   for (let i = 0; i < n - 1; i++) {
     dxs[i] = xs[i + 1] - xs[i];
     ms[i] = (ys[i + 1] - ys[i]) / dxs[i];
   }
 
-  const t = new Array(n);
+  const t: number[] = new Array(n);
   t[0] = ms[0];
   t[n - 1] = ms[n - 2];
   for (let i = 1; i < n - 1; i++) {
@@ -87,7 +119,7 @@ export function createSpline(points) {
     }
   }
 
-  return function (x) {
+  return function (x: number): number {
     if (x <= xs[0]) return ys[0];
     if (x >= xs[n - 1]) return ys[n - 1];
     let lo = 0, hi = n - 1;
@@ -111,7 +143,7 @@ export function createSpline(points) {
  * shelf around 0.35–0.65 makes broad lowland/plain belts; the steeper
  * ends give basin floors and alpine plateaus.
  */
-export const BASE_CURVE_POINTS = [
+export const BASE_CURVE_POINTS: readonly SplinePoint[] = [
   [0.00, 0.010],
   [0.20, 0.045],
   [0.35, 0.115],
@@ -126,7 +158,7 @@ export const BASE_CURVE_POINTS = [
  * (1 = rugged young mountains, 0 = eroded flats / depositional basins).
  * The slow lower tail keeps heavily "eroded" regions genuinely calm.
  */
-export const RELIEF_CURVE_POINTS = [
+export const RELIEF_CURVE_POINTS: readonly SplinePoint[] = [
   [0.00, 0.03],
   [0.15, 0.06],
   [0.35, 0.18],
@@ -138,25 +170,26 @@ export const RELIEF_CURVE_POINTS = [
 /**
  * Builds the seeded height function used by the infinite terrain.
  *
- * @param {object} cfg
- * seed                   PRNG seed; same seed ⇒ same world.
- * warpWavelength         base wavelength (m) of the warp fields.
- * warpAmplitude          total warp displacement (m); L1 gets 45% of it.
- * continentWavelength    base-elevation channel (m).
- * erosionWavelength      relief channel (m).
- * mountainWavelength     ridged crest noise (m).
- * mountainOctaves        ridged octaves.
- * spineWavelength        mountain-chain mask noise (m).
- * spineAnisotropy        chain elongation along the local range direction.
- * hillsWavelength / hillsOctaves   rolling-ground fBM.
- * roughnessWavelength    per-region detail-roughness modulation (m).
- * mountainAmp / hillsAmp amplitudes of the relief-scaled terms.
- * baseCurve / reliefCurve  spline fns (see createSpline).
- * detailLayers           [{ wavelength, amplitude, octaves }] sub-vertex
- *                        detail; amplitude is further scaled by relief and
- *                        roughness so flats stay clean like depositional
- *                        ground and crests stay rough.
- * @returns {{ heightAt(x: number, z: number): number }}
+ * @param cfg.seed                   PRNG seed; same seed ⇒ same world.
+ * @param cfg.warpWavelength         base wavelength (m) of the warp fields.
+ * @param cfg.warpAmplitude          total warp displacement (m); L1 gets 45% of it.
+ * @param cfg.continentWavelength    base-elevation channel (m).
+ * @param cfg.erosionWavelength      relief channel (m).
+ * @param cfg.mountainWavelength     ridged crest noise (m).
+ * @param cfg.mountainOctaves        ridged octaves.
+ * @param cfg.spineWavelength        mountain-chain mask noise (m).
+ * @param cfg.spineAnisotropy        chain elongation along the local range direction.
+ * @param cfg.hillsWavelength        rolling-ground fBM wavelength (m).
+ * @param cfg.hillsOctaves           rolling-ground octaves.
+ * @param cfg.roughnessWavelength    per-region detail-roughness modulation (m).
+ * @param cfg.mountainAmp            amplitude of the relief-scaled ridge term.
+ * @param cfg.hillsAmp               amplitude of the relief-scaled hills term.
+ * @param cfg.baseCurve              spline fn (see createSpline).
+ * @param cfg.reliefCurve            spline fn (see createSpline).
+ * @param cfg.detailLayers           sub-vertex detail; amplitude is further
+ *                                   scaled by relief and roughness so flats
+ *                                   stay clean like depositional ground and
+ *                                   crests stay rough.
  */
 export function makeTerrainComposer({
   seed,
@@ -176,7 +209,7 @@ export function makeTerrainComposer({
   baseCurve = createSpline(BASE_CURVE_POINTS),
   reliefCurve = createSpline(RELIEF_CURVE_POINTS),
   detailLayers = [],
-}) {
+}: TerrainComposerOptions): TerrainComposer {
   // Per-channel contrast expansion (see expand01). Tuned so a channel's
   // realistic fbm range reaches its response curve's steep regions.
   const CONT_EXPAND = 1.8;
@@ -210,7 +243,7 @@ export function makeTerrainComposer({
   const ampL1 = warpAmplitude * 0.45;
   const ampL2 = warpAmplitude;
 
-  function heightAt(x, z) {
+  function heightAt(x: number, z: number): number {
     // ---- iterated domain warp (fbm of fbm, IQ style) --------------------
     // q warps the input of r, r warps the terrain's coordinates. The second
     // level is a 2-octave fBM, the first a single octave — enough to break
