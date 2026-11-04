@@ -296,8 +296,26 @@ The fragment shader also clips each ring to its parent's square (section
 ```
 nLevel = max(level - uNormalLodBias, 0)
 nm     = texture(uNormalArray, vec3(uv(nLevel), nLevel)).xyz * 2 - 1
-mapN   = normalize(vec3(nm.x * strength, nm.z, nm.y * strength))
+sBase  = nm.xy / max(nm.z, 1e-4)
+Nbase  = normalize(vec3(sBase.x * strength, 1, sBase.y * strength))
+
+// optional tiling detail, sampled in world x/z
+sDetail = detailSlope(uvDetail) * detailStrength * fade
+N       = normalize(vec3((sBase * strength + sDetail).x, 1,
+                         (sBase * strength + sDetail).y))
 ```
+
+Composing in slope space is exact for height fields and needs no tangent
+frame; adding the two normals directly (UDN) would flatten the base on steep
+slopes. `Nbase` drives the albedo/slope masks, while `N` drives diffuse, hemi
+and specular lighting, so changing the detail strength does not move the
+grass/rock/snow boundaries.
+
+The detail tile is a standalone repeating 2D texture, so unlike the normal
+atlas it can use mipmaps and anisotropic filtering. Its UV is
+`(vWorldPos.xz + mod(renderOrigin, tileWorldSize)) / tileWorldSize`; the offset
+is computed in JS doubles, so a floating-origin rebase shifts the UV by an
+integer number of periods and the pattern stays world-locked.
 
 The DEM page sets `uNormalLodBias` to 1: each ring samples the next-finer
 normal layer, which is already resident in the 5×5 cache and covers the whole
@@ -321,7 +339,12 @@ The encoding invariants are:
 - heightfield row `j` maps to `+z`, column `i` to `+x`;
 - normal map is object-space, `R=N.x`, `G=N.z`, `B=N.y`, no TBN;
 - normals are baked from float heights, never from an 8-bit heightmap;
-- `uNormalStrength` scales decoded tangent components and renormalises;
+- `uNormalStrength` scales the decoded base slope and renormalises;
+- the detail tile uses the same object-space encoding and is composed by
+  adding its slope to the base slope, never by rotating through a TBN;
+- the detail UV is world-locked from `vWorldPos.xz` and a double-precision
+  `mod(renderOrigin, tileWorldSize)` offset;
+- material masks use the base normal, not the detail-perturbed normal;
 - custom shaders must not re-include `*_pars_fragment` chunks.
 
 ## 7. Flight, world coordinates and precision

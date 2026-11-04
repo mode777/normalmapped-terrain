@@ -19,6 +19,9 @@ const arg = (name: string, def: string): string => {
 
 const TARGET = arg('url', 'http://127.0.0.1:4173/dem.html');
 const OUT = arg('out', 'shots-dem');
+// Diagnostic tile strength: strong enough to read in a still, below the
+// crunchy end of the slider. Production tuning is recorded in the findings.
+const DETAIL_STRENGTH = 0.35;
 const CHROME = arg('chrome', process.env.CHROME_SHELL_PATH ||
   '/home/devuser/browsers/chrome-headless-shell/linux-131.0.6778.264/chrome-headless-shell-linux64/chrome-headless-shell');
 
@@ -67,6 +70,7 @@ const read = () => page.evaluate(() => {
     flight: q.flight.getInfo(),
     state: q.state,
     ground: q.groundHeight(),
+    detailStrength: q.state.detailStrength,
     camera: q.camera.position.toArray(),
   };
 });
@@ -76,21 +80,57 @@ const shot = async (name: string): Promise<void> => {
   await page.screenshot({ path: `${OUT}/${name}.png` });
 };
 
+const setNormal = (value: number): Promise<void> => page.evaluate((v) => {
+  const s = document.getElementById('normal-strength') as HTMLInputElement;
+  s.value = String(v);
+  s.dispatchEvent(new Event('input', { bubbles: true }));
+}, value);
+
+const setDetail = (value: number): Promise<void> => page.evaluate((v) => {
+  window.__dem.setDetailStrength(v);
+}, value);
+
+const setSun = (azimuth: number, elevation: number): Promise<void> => page.evaluate(({ az, el }) => {
+  const azInput = document.getElementById('sun-azimuth') as HTMLInputElement;
+  const elInput = document.getElementById('sun-elevation') as HTMLInputElement;
+  azInput.value = String(az);
+  elInput.value = String(el);
+  azInput.dispatchEvent(new Event('input', { bubbles: true }));
+  elInput.dispatchEvent(new Event('input', { bubbles: true }));
+}, { az: azimuth, el: elevation });
+
+const detailPose = async (
+  x: number,
+  z: number,
+  altitude: number,
+  pitch: number,
+  yaw: number,
+): Promise<void> => {
+  await page.evaluate(async ({ px, pz, alt, p, y }) => {
+    await window.__dem.warpTo(px, pz);
+    const ground = window.__dem.groundHeight();
+    await window.__dem.warpTo(px, pz, ground + alt);
+    window.__dem.flight.pitch = p;
+    window.__dem.flight.yaw = y;
+  }, { px: x, pz: z, alt: altitude, p: pitch, y: yaw });
+  await sleep(900);
+};
+
 console.log('stats initial:', JSON.stringify(await read()));
 await shot('01-default');
 
 // Same pose, flat normal: isolates the normal map's contribution.
-await page.evaluate(() => {
-  const s = document.getElementById('normal-strength') as HTMLInputElement;
-  s.value = '0';
-  s.dispatchEvent(new Event('input', { bubbles: true }));
-});
+await setNormal(0);
+await setDetail(0);
 await shot('02-normal0');
-await page.evaluate(() => {
-  const s = document.getElementById('normal-strength') as HTMLInputElement;
-  s.value = '1';
-  s.dispatchEvent(new Event('input', { bubbles: true }));
-});
+
+await setNormal(1);
+await setDetail(0);
+await shot('02b-detail-off');
+
+await setDetail(DETAIL_STRENGTH);
+await shot('02c-detail-on');
+await setDetail(0);
 
 // Orbit movement.
 await page.evaluate(() => window.__dem.setAutoCruise(true));
@@ -135,6 +175,34 @@ await page.evaluate(async () => { await window.__dem.warpTo(6000, 0); });
 await sleep(1000);
 console.log('stats boundary:', JSON.stringify(await read()));
 await shot('08-boundary');
+
+// Detail-layer checks. The close-up pair is the same-pose analyzer input;
+// the orientation pair uses a low sun on the diagnostic tile.
+await detailPose(2500, 0, 80, -0.35, Math.PI / 2);
+await setDetail(0);
+await shot('09-detail-closeup-off');
+await setDetail(DETAIL_STRENGTH);
+await shot('10-detail-closeup-on');
+
+await setSun(90, 20);
+await shot('11-detail-sun-east');
+await setSun(270, 20);
+await shot('12-detail-sun-west');
+await setSun(305, 34);
+
+await detailPose(2500, 0, 60, -0.2, Math.PI / 2);
+await setDetail(DETAIL_STRENGTH);
+await shot('13-detail-cliff');
+
+// Warp away and back at the same close pose: the detail pattern must stay
+// world-locked across the floating-origin rebase.
+await detailPose(2500, 0, 80, -0.35, Math.PI / 2);
+await setDetail(DETAIL_STRENGTH);
+await shot('14-detail-warp-before');
+await page.evaluate(async () => { await window.__dem.warpTo(25000, 0); });
+await page.evaluate(async () => { await window.__dem.warpTo(2500, 0); });
+await detailPose(2500, 0, 80, -0.35, Math.PI / 2);
+await shot('15-detail-warp-after');
 
 writeFileSync(`${OUT}/console.json`, JSON.stringify({ errors, messages }, null, 2));
 console.log('ERRORS:', JSON.stringify(errors, null, 2));

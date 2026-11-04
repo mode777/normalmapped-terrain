@@ -13,6 +13,7 @@
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
     "test:infinite": "node tools/test-infinite.ts",
+    "bake:detail": "node tools/bake-detail-normal.ts",
     "bake:dem": "node tools/bake-dem.ts",
     "test:dem": "node tools/test-dem.ts"
   },

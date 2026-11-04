@@ -8,9 +8,19 @@
  */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { PNG } from 'pngjs';
 import { makeHeightField, generateTile } from '../src/infinite/heightfield.ts';
+import { detailUvOffset } from '../src/terrain/detail.ts';
 import { bakeTileNormals } from '../src/terrain/normals.ts';
 import { snapLevelOrigins } from '../src/terrain/origins.ts';
+import {
+  buildDetailTile,
+  detailHeight,
+  DETAIL_HEIGHT_SCALE,
+  DETAIL_TILE_SIZE,
+  DETAIL_TILE_WORLD_SIZE,
+} from './detail/tile.ts';
 
 const hf = makeHeightField(12345);
 const near = (a: number, b: number, eps: number, msg: string): void => {
@@ -193,6 +203,115 @@ const near = (a: number, b: number, eps: number, msg: string): void => {
   assert.ok(2 * centerCells >= centerCells + 0.5, 'ring outer edge clears the parent square');
   // The level-0 ring instead uses hole = C and abuts the centre block, which
   // shares its lattice and origin, so no clipping is needed there.
+}
+
+// ---- slope-space base normal equivalence ----------------------------------
+{
+  const norm3 = (x: number, y: number, z: number): [number, number, number] => {
+    const inv = 1 / Math.hypot(x, y, z);
+    return [x * inv, y * inv, z * inv];
+  };
+  const pairs: Array<[number, number]> = [
+    [0, 0], [0.2, 0], [0, -0.2], [-0.5, 0.3], [0.7, 0.2],
+    [-0.7, 0.7], [0.95, 0.1], [-0.95, 0.1], [0.3, -0.9],
+  ];
+  for (const [nx, nz] of pairs) {
+    const ny = Math.sqrt(Math.max(0, 1 - nx * nx - nz * nz));
+    assert.ok(ny > 0.1, `test normal is not vertical ${nx},${nz}`);
+    for (const strength of [0, 0.5, 1, 2.5]) {
+      const oldN = norm3(nx * strength, ny, nz * strength);
+      const newN = norm3((nx / ny) * strength, 1, (nz / ny) * strength);
+      near(oldN[0], newN[0], 1e-9, `slope x ${nx},${nz},${strength}`);
+      near(oldN[1], newN[1], 1e-9, `slope y ${nx},${nz},${strength}`);
+      near(oldN[2], newN[2], 1e-9, `slope z ${nx},${nz},${strength}`);
+    }
+  }
+}
+
+// ---- detail UV rebase invariance ------------------------------------------
+{
+  const tileWorldSize = 16;
+  const originStep = 4096; // infinite page renderOriginStep
+  const origin = { x: 12345.6, z: -987.2 };
+  const p = { x: 13579.1, z: -1234.5 };
+  const uv = (ox: number, oz: number): { x: number; y: number } => {
+    const offset = detailUvOffset(ox, oz, tileWorldSize);
+    return {
+      x: (p.x - ox + offset.x) / tileWorldSize,
+      y: (p.z - oz + offset.y) / tileWorldSize,
+    };
+  };
+
+  const base = uv(origin.x, origin.z);
+  for (let k = -3; k <= 3; k++) {
+    const moved = uv(origin.x + k * originStep, origin.z + k * originStep);
+    near(moved.x - base.x, Math.round(moved.x - base.x), 1e-6, `detail uv x rebase ${k}`);
+    near(moved.y - base.y, Math.round(moved.y - base.y), 1e-6, `detail uv y rebase ${k}`);
+  }
+
+  for (const [x, z] of [[-1, -1], [-12345.6, 987.2], [0, 0]] as const) {
+    const offset = detailUvOffset(x, z, tileWorldSize);
+    assert.ok(offset.x >= 0 && offset.x < tileWorldSize, `detail offset x in range ${x}`);
+    assert.ok(offset.y >= 0 && offset.y < tileWorldSize, `detail offset y in range ${z}`);
+  }
+}
+
+// ---- detail-normal tile ---------------------------------------------------
+{
+  const assetUrl = new URL('../public/materials/detail-diagnostic-normal.png', import.meta.url);
+  const png = PNG.sync.read(readFileSync(assetUrl));
+  const built = buildDetailTile();
+  assert.equal(png.width, DETAIL_TILE_SIZE, 'detail tile width');
+  assert.equal(png.height, DETAIL_TILE_SIZE, 'detail tile height');
+  assert.equal(png.data.length, built.normals.length, 'detail tile RGBA size');
+
+  // The checked-in asset must match the deterministic generator byte-for-byte.
+  for (let k = 0; k < built.normals.length; k++) {
+    assert.equal(png.data[k], built.normals[k], `detail tile byte ${k}`);
+  }
+
+  // Independently rebuild the object-space normal for sampled texels and
+  // compare it to the PNG. The expected channel order is (N.x, N.z, N.y), so a
+  // swapped green/blue channel fails here.
+  const size = DETAIL_TILE_SIZE;
+  const spacing = DETAIL_TILE_WORLD_SIZE / size;
+  const gradScale = DETAIL_HEIGHT_SCALE / (8 * spacing);
+  const wrap = (v: number): number => ((v % size) + size) % size;
+  const h = (i: number, j: number): number => detailHeight(wrap(i) / size, wrap(j) / size);
+
+  for (let sj = 0; sj < 8; sj++) {
+    for (let si = 0; si < 8; si++) {
+      const i = Math.floor(((si + 0.5) * size) / 8);
+      const j = Math.floor(((sj + 0.5) * size) / 8);
+      const tl = h(i - 1, j - 1), t = h(i, j - 1), tr = h(i + 1, j - 1);
+      const l = h(i - 1, j), r = h(i + 1, j);
+      const bl = h(i - 1, j + 1), b = h(i, j + 1), br = h(i + 1, j + 1);
+      const gx = (tr + 2 * r + br) - (tl + 2 * l + bl);
+      const gz = (bl + 2 * b + br) - (tl + 2 * t + tr);
+      let nx = -gx * gradScale, ny = 1, nz = -gz * gradScale;
+      const inv = 1 / Math.hypot(nx, ny, nz);
+      nx *= inv; ny *= inv; nz *= inv;
+      const o = (j * size + i) * 4;
+      near(png.data[o], Math.round((nx * 0.5 + 0.5) * 255), 2, `detail R ${i},${j}`);
+      near(png.data[o + 1], Math.round((nz * 0.5 + 0.5) * 255), 2, `detail G ${i},${j}`);
+      near(png.data[o + 2], Math.round((ny * 0.5 + 0.5) * 255), 2, `detail B ${i},${j}`);
+    }
+  }
+
+  // Decoded normals are unit length within 8-bit tolerance.
+  for (let k = 0; k < size * size; k += 97) {
+    const r = png.data[k * 4] / 127.5 - 1;
+    const g = png.data[k * 4 + 1] / 127.5 - 1;
+    const b = png.data[k * 4 + 2] / 127.5 - 1;
+    near(Math.hypot(r, g, b), 1, 0.02, `detail unit length ${k}`);
+  }
+
+  // The height field wraps, so the tile has no seam.
+  for (let k = 0; k < 8; k++) {
+    const t = k / 8;
+    near(detailHeight(0, t), detailHeight(1, t), 1e-12, `detail u seam ${t}`);
+    near(detailHeight(t, 0), detailHeight(t, 1), 1e-12, `detail v seam ${t}`);
+  }
 }
 
 console.log('infinite-terrain unit checks: OK');

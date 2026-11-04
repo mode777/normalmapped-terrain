@@ -29,6 +29,7 @@ interface AppState {
   sunAz: number;
   sunEl: number;
   normalStrength: number;
+  detailStrength: number;
   wireframe: boolean;
   lodDebug: boolean;
   autoCruise: boolean;
@@ -57,6 +58,7 @@ export interface DemQA {
   setWireframe(on: boolean): void;
   setCrackDebug(on: boolean): void;
   setNormalLodBias(bias: number): void;
+  setDetailStrength(strength: number): void;
   waitForTiles(): Promise<void>;
   warpTo(x: number, z: number, y?: number | null): Promise<void>;
   groundHeight(): number;
@@ -73,6 +75,7 @@ const state: AppState = {
   sunAz: 305,
   sunEl: 34,
   normalStrength: 1,
+  detailStrength: 0,
   wireframe: false,
   lodDebug: false,
   autoCruise: true,
@@ -120,6 +123,10 @@ async function boot(): Promise<void> {
       state.normalStrength = s;
       terrainRenderer?.setNormalStrength(s);
     },
+    onDetailStrength: (s) => {
+      state.detailStrength = s;
+      terrainRenderer?.setDetailStrength(s);
+    },
     onWireframe: (on) => { state.wireframe = on; terrainRenderer?.setWireframe(on); },
     onLodDebug: (on) => {
       state.lodDebug = on;
@@ -158,6 +165,14 @@ async function boot(): Promise<void> {
       grassStrength: 0.9,
       sandStrength: 0,
       specular: 0.04,
+    },
+    detail: {
+      textureUrl: new URL('materials/detail-diagnostic-normal.png', document.baseURI).toString(),
+      tileWorldSize: 32,
+      strength: state.detailStrength,
+      fadeStart: 150,
+      fadeEnd: 500,
+      onError: (message) => ui.toast(message, true),
     },
   });
   // The DEM view looks across a 30 km chunk; the infinite page's
@@ -384,6 +399,14 @@ function setupQA(): void {
     },
     setNormalLodBias: (bias) => {
       terrainRenderer.setNormalLodBias(bias);
+    },
+    setDetailStrength: (strength) => {
+      state.detailStrength = strength;
+      terrainRenderer.setDetailStrength(strength);
+      const input = document.getElementById('detail-strength');
+      if (input instanceof HTMLInputElement) input.value = String(strength);
+      const label = document.getElementById('detail-strength-val');
+      if (label) label.textContent = `${strength.toFixed(2)}×`;
     },
     waitForTiles: () => streamer.waitForDesired(flight.x, flight.z),
     warpTo: async (x, z, y = null) => {

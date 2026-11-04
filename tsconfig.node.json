@@ -6,6 +6,8 @@
   },
   "include": [
     "tools/test-infinite.ts",
+    "tools/bake-detail-normal.ts",
+    "tools/detail/**/*.ts",
     "tools/analyze-infinite.ts",
     "tools/analyze-dem.ts",
     "tools/test-dem.ts",

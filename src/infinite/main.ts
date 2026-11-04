@@ -47,6 +47,7 @@ interface AppState {
   sunAz: number;
   sunEl: number;
   normalStrength: number;
+  detailStrength: number;
   wireframe: boolean;
   lodDebug: boolean;
   autoCruise: boolean;
@@ -73,6 +74,7 @@ export interface InfiniteQA {
   setTileDebug(on: boolean): void;
   setWireframe(on: boolean): void;
   setCrackDebug(on: boolean): void;
+  setDetailStrength(strength: number): void;
   waitForTiles(): Promise<void>;
   warpTo(x: number, z: number, y?: number | null): Promise<void>;
   groundHeight(): number;
@@ -89,6 +91,7 @@ const state: AppState = {
   sunAz: 305,
   sunEl: 34,
   normalStrength: 1,
+  detailStrength: 0,
   wireframe: false,
   lodDebug: false,
   autoCruise: true,
@@ -132,6 +135,10 @@ async function boot(): Promise<void> {
       state.normalStrength = s;
       terrainRenderer?.setNormalStrength(s);
     },
+    onDetailStrength: (s) => {
+      state.detailStrength = s;
+      terrainRenderer?.setDetailStrength(s);
+    },
     onWireframe: (on) => { state.wireframe = on; terrainRenderer?.setWireframe(on); },
     onLodDebug: (on) => {
       state.lodDebug = on;
@@ -154,7 +161,19 @@ async function boot(): Promise<void> {
 
   ui.setLoading(0.06, 'Building clipmap…');
   await nextFrame();
-  terrainRenderer = new ClipmapRenderer({ renderer, scene, config: CONFIG });
+  terrainRenderer = new ClipmapRenderer({
+    renderer,
+    scene,
+    config: CONFIG,
+    detail: {
+      textureUrl: new URL('materials/detail-diagnostic-normal.png', document.baseURI).toString(),
+      tileWorldSize: 16,
+      strength: state.detailStrength,
+      fadeStart: 80,
+      fadeEnd: 250,
+      onError: (message) => ui.toast(message, true),
+    },
+  });
   terrainRenderer.setNormalStrength(state.normalStrength);
 
   const source = new ProceduralTileSource({ seed: CONFIG.seed, config: CONFIG });
@@ -361,6 +380,14 @@ function setupQA(): void {
     setCrackDebug: (on) => {
       renderer.setClearColor(on ? 0xff00ff : 0x0b0f14, 1);
       sky.visible = !on;
+    },
+    setDetailStrength: (strength) => {
+      state.detailStrength = strength;
+      terrainRenderer.setDetailStrength(strength);
+      const input = document.getElementById('detail-strength');
+      if (input instanceof HTMLInputElement) input.value = String(strength);
+      const label = document.getElementById('detail-strength-val');
+      if (label) label.textContent = `${strength.toFixed(2)}×`;
     },
     waitForTiles: () => streamer.waitForDesired(flight.x, flight.z),
     warpTo: async (x, z, y = null) => {

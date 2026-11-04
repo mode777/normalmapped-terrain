@@ -20,6 +20,7 @@ import {
   deriveTerrainMetrics,
   assertTextureBudget,
 } from './config.ts';
+import { detailUvOffset } from './detail.ts';
 import type { TerrainConfig } from './tile-source.ts';
 import type { SunState } from './sun.ts';
 
@@ -39,6 +40,12 @@ type TerrainUniforms = {
   uPixelScale: THREE.IUniform<number>;
   uNormalStrength: THREE.IUniform<number>;
   uNormalLodBias: THREE.IUniform<number>;
+  uDetailNormal: THREE.IUniform<THREE.Texture>;
+  uDetailStrength: THREE.IUniform<number>;
+  uDetailUvOffset: THREE.IUniform<THREE.Vector2>;
+  uDetailTileSize: THREE.IUniform<number>;
+  uDetailFadeStart: THREE.IUniform<number>;
+  uDetailFadeEnd: THREE.IUniform<number>;
   uSunDirection: THREE.IUniform<THREE.Vector3>;
   uSunColor: THREE.IUniform<THREE.Color>;
   uSkyColor: THREE.IUniform<THREE.Color>;
@@ -65,11 +72,27 @@ export interface ClipmapPalette {
   specular: number;
 }
 
+export interface DetailMaterialOptions {
+  /** URL of the repeating object-space normal tile. */
+  textureUrl: string;
+  /** World size of one tile, metres. */
+  tileWorldSize: number;
+  /** Slope multiplier; 0 disables the layer. */
+  strength?: number;
+  /** Camera distance where the detail starts fading, metres. */
+  fadeStart?: number;
+  /** Camera distance where the detail is fully faded, metres. */
+  fadeEnd?: number;
+  /** Called when the tile cannot be loaded; the layer stays disabled. */
+  onError?: (message: string) => void;
+}
+
 export interface ClipmapRendererOptions {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   config: TerrainConfig;
   palette?: ClipmapPalette;
+  detail?: DetailMaterialOptions;
 }
 
 const wrapPhase = (v: number, m: number): number => ((v % m) + m) % m;
@@ -93,8 +116,12 @@ export class ClipmapRenderer {
   private readonly originTargets: OriginTarget[];
   private readonly levelOrigins: Float64Array;
   private readonly bufferSize = new THREE.Vector2();
+  private readonly detailPlaceholder: THREE.Texture;
+  private readonly detailTileWorldSize: number;
+  private detailTexture: THREE.Texture | null = null;
+  private detailDisposed = false;
 
-  constructor({ renderer, scene, config, palette }: ClipmapRendererOptions) {
+  constructor({ renderer, scene, config, palette, detail }: ClipmapRendererOptions) {
     this.renderer = renderer;
     this.scene = scene;
     this.config = config;
@@ -104,6 +131,10 @@ export class ClipmapRenderer {
     this.heightTexture = this.createHeightTexture();
     this.normalTexture = this.createNormalTexture();
     this.levelOrigins = new Float64Array(config.levels * 2);
+    this.detailPlaceholder = this.createDetailPlaceholder();
+    this.detailTileWorldSize = Math.max(1e-3, detail?.tileWorldSize ?? 16);
+    const detailFadeStart = detail?.fadeStart ?? 0;
+    const detailFadeEnd = Math.max(detailFadeStart + 1, detail?.fadeEnd ?? 1);
 
     this.terrainUniforms = {
       uHeightArray: { value: this.heightTexture },
@@ -123,6 +154,12 @@ export class ClipmapRenderer {
       // Default to the geometric layer; the DEM scene opts into one finer
       // layer, where its 5x5 cache covers the whole coarse ring.
       uNormalLodBias: { value: 0 },
+      uDetailNormal: { value: this.detailPlaceholder },
+      uDetailStrength: { value: Math.max(0, Math.min(2, detail?.strength ?? 0)) },
+      uDetailUvOffset: { value: new THREE.Vector2(0, 0) },
+      uDetailTileSize: { value: this.detailTileWorldSize },
+      uDetailFadeStart: { value: detailFadeStart },
+      uDetailFadeEnd: { value: detailFadeEnd },
       uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
       uSunColor: { value: new THREE.Color(1, 0.97, 0.9) },
       uSkyColor: { value: new THREE.Color(0.20, 0.42, 0.72) },
@@ -143,6 +180,8 @@ export class ClipmapRenderer {
       uniforms: this.terrainUniforms,
       side: THREE.FrontSide,
     });
+
+    if (detail) this.loadDetailTexture(detail);
 
     this.debugMat = new THREE.ShaderMaterial({
       vertexShader: debugVertexShader,
@@ -254,6 +293,54 @@ export class ClipmapRenderer {
     return texture;
   }
 
+  private createDetailPlaceholder(): THREE.Texture {
+    const texture = new THREE.DataTexture(
+      new Uint8Array([128, 128, 255, 255]),
+      1,
+      1,
+      THREE.RGBAFormat,
+    );
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.generateMipmaps = false;
+    texture.flipY = false;
+    texture.colorSpace = THREE.NoColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private loadDetailTexture(detail: DetailMaterialOptions): void {
+    new THREE.TextureLoader().load(
+      detail.textureUrl,
+      (texture) => {
+        if (this.detailDisposed) {
+          texture.dispose();
+          return;
+        }
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.magFilter = THREE.LinearFilter;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.generateMipmaps = true;
+        texture.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+        texture.colorSpace = THREE.NoColorSpace;
+        texture.flipY = false;
+        texture.needsUpdate = true;
+        this.detailTexture = texture;
+        this.terrainUniforms.uDetailNormal.value = texture;
+      },
+      undefined,
+      (error: unknown) => {
+        const message = `detail normal texture failed to load: ${detail.textureUrl}`;
+        console.error(message, error);
+        this.terrainUniforms.uDetailStrength.value = 0;
+        detail.onError?.(message);
+      },
+    );
+  }
+
   private pixelScale(camera: THREE.PerspectiveCamera): number {
     this.renderer.getDrawingBufferSize(this.bufferSize);
     return (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2))
@@ -276,6 +363,8 @@ export class ClipmapRenderer {
       wrapPhase(renderOrigin.x, this.metrics.phaseWrap),
       wrapPhase(renderOrigin.y, this.metrics.phaseWrap),
     );
+    const detailOffset = detailUvOffset(renderOrigin.x, renderOrigin.y, this.detailTileWorldSize);
+    this.terrainUniforms.uDetailUvOffset.value.set(detailOffset.x, detailOffset.y);
     this.terrainUniforms.uPixelScale.value = this.pixelScale(camera);
 
     for (const { geo, levels } of this.originTargets) {
@@ -332,6 +421,10 @@ export class ClipmapRenderer {
     this.terrainUniforms.uNormalStrength.value = strength;
   }
 
+  setDetailStrength(strength: number): void {
+    this.terrainUniforms.uDetailStrength.value = Math.max(0, Math.min(2, strength));
+  }
+
   /** Negative normal LOD bias; 1 samples the next-finer normal layer. */
   setNormalLodBias(bias: number): void {
     this.terrainUniforms.uNormalLodBias.value = Math.max(0, Math.min(3, bias));
@@ -370,5 +463,8 @@ export class ClipmapRenderer {
     this.debugMat.dispose();
     this.heightTexture.dispose();
     this.normalTexture.dispose();
+    this.detailDisposed = true;
+    this.detailPlaceholder.dispose();
+    this.detailTexture?.dispose();
   }
 }

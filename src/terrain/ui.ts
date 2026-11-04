@@ -6,6 +6,7 @@
 export interface UICallbacks {
   onSunChange(azimuth: number, elevation: number): void;
   onNormalStrength(strength: number): void;
+  onDetailStrength(strength: number): void;
   onSpeedChange(speed: number): void;
   onWireframe(on: boolean): void;
   onLodDebug(on: boolean): void;
@@ -68,6 +69,8 @@ interface UIElements {
   sunElVal: HTMLSpanElement;
   normalStrength: HTMLInputElement;
   normalStrengthVal: HTMLSpanElement;
+  detailStrength: HTMLInputElement;
+  detailStrengthVal: HTMLSpanElement;
   wireframe: HTMLInputElement;
   lodDebug: HTMLInputElement;
   tileDebug: HTMLInputElement;
@@ -104,6 +107,8 @@ export function initUI(cb: UICallbacks): UIApi {
     sunElVal: byId<HTMLSpanElement>('sun-elevation-val'),
     normalStrength: byId<HTMLInputElement>('normal-strength'),
     normalStrengthVal: byId<HTMLSpanElement>('normal-strength-val'),
+    detailStrength: byId<HTMLInputElement>('detail-strength'),
+    detailStrengthVal: byId<HTMLSpanElement>('detail-strength-val'),
     wireframe: byId<HTMLInputElement>('wireframe'),
     lodDebug: byId<HTMLInputElement>('lod-debug'),
     tileDebug: byId<HTMLInputElement>('tile-debug'),
@@ -129,6 +134,11 @@ export function initUI(cb: UICallbacks): UIApi {
   el.normalStrength.addEventListener('input', () => {
     el.normalStrengthVal.textContent = `${(+el.normalStrength.value).toFixed(2)}×`;
     cb.onNormalStrength(+el.normalStrength.value);
+  });
+
+  el.detailStrength.addEventListener('input', () => {
+    el.detailStrengthVal.textContent = `${(+el.detailStrength.value).toFixed(2)}×`;
+    cb.onDetailStrength(+el.detailStrength.value);
   });
 
   el.cruiseSpeed.addEventListener('input', () => {

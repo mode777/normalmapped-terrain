@@ -146,6 +146,12 @@ export const terrainFragmentShader: string = /* glsl */ `
 
   uniform float uNormalStrength;
   uniform float uNormalLodBias;
+  uniform sampler2D uDetailNormal;
+  uniform float uDetailStrength;
+  uniform vec2 uDetailUvOffset;
+  uniform float uDetailTileSize;
+  uniform float uDetailFadeStart;
+  uniform float uDetailFadeEnd;
   uniform vec3 uSunDirection;
   uniform vec3 uSunColor;
   uniform vec3 uSkyColor;
@@ -233,8 +239,27 @@ export const terrainFragmentShader: string = /* glsl */ `
       nm = mix(nm, nm2, blend);
     }
 
-    vec2 tangent = nm.xy * uNormalStrength;
-    vec3 N = normalize(vec3(tangent.x, nm.z, tangent.y));
+    // ---- normal: base slope + optional detail slope --------------------
+    // The terrain is an unrotated heightfield over x/z, so object-space
+    // normals are height gradients in the same frame. Compose in slope space;
+    // there is deliberately no TBN and no per-vertex tangent attribute.
+    // Adding the normals directly (UDN) would flatten the base on steep
+    // slopes; adding the slopes is exact for height fields.
+    vec2 sBase = nm.xy / max(nm.z, 1e-4);
+    vec3 Nbase = normalize(vec3(sBase.x * uNormalStrength, 1.0, sBase.y * uNormalStrength));
+    vec3 N = Nbase;
+
+    float viewDist = length(vWorldPos - cameraPosition);
+    float detailFade = 1.0 - smoothstep(uDetailFadeStart, uDetailFadeEnd, viewDist);
+    if (uDetailStrength > 0.0 && detailFade > 0.0) {
+      // vWorldPos is render-space; uDetailUvOffset is the floating origin
+      // reduced modulo the tile size, so the pattern stays world-locked.
+      vec2 uvDetail = (vWorldPos.xz + uDetailUvOffset) / uDetailTileSize;
+      vec3 dm = texture(uDetailNormal, uvDetail).xyz * 2.0 - 1.0;
+      vec2 sDetail = dm.xy / max(dm.z, 0.1);
+      vec2 s = sBase * uNormalStrength + sDetail * (uDetailStrength * detailFade);
+      N = normalize(vec3(s.x, 1.0, s.y));
+    }
 
     // ---- debug LOD view ------------------------------------------------
     if (uDebugLod > 0.5) {
@@ -252,7 +277,8 @@ export const terrainFragmentShader: string = /* glsl */ `
 
     // ---- albedo: height + slope bands ----------------------------------
     float hv = vHeightN;
-    float slope = 1.0 - N.y;
+    // Material masks use the base normal; only lighting uses the detail.
+    float slope = 1.0 - Nbase.y;
     float hn = hv;
 
     vec3 grass = mix(vec3(0.035, 0.075, 0.025), vec3(0.120, 0.200, 0.055), hv);
@@ -283,8 +309,7 @@ export const terrainFragmentShader: string = /* glsl */ `
     color += uSunColor * pow(max(dot(N, H), 0.0), 46.0) * uSpecular * specW;
 
     // ---- distance fog ---------------------------------------------------
-    float dist = length(vWorldPos - cameraPosition);
-    float fog = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist);
+    float fog = 1.0 - exp(-uFogDensity * uFogDensity * viewDist * viewDist);
     color = mix(color, uFogColor, fog);
 
     // The horizon skirt fades into the fog so the last ring has no hard edge.

@@ -62,7 +62,7 @@ for (const f of files) {
   console.log(`${f}  sky=${JSON.stringify(sky)}  terrain=${JSON.stringify(terra)}`);
   check(`${f}: terrain has variation`, terra.std > 8, `std=${terra.std}`);
   check(`${f}: no large black holes`, terra.dark < 0.08, `dark=${terra.dark}`);
-  if (!f.includes('lod') && !f.includes('cracks')) {
+  if (!f.includes('lod') && !f.includes('cracks') && !f.includes('detail') && !f.includes('cliff')) {
     check(`${f}: sky is brighter than terrain`, sky.mean > terra.mean, `sky=${sky.mean} terrain=${terra.mean}`);
   }
 }
@@ -76,6 +76,17 @@ try {
     `hf ${flat.hf} -> ${normal.hf}`);
 } catch {
   console.log('skip normal-map detail comparison (shots missing)');
+}
+
+// Same-pose detail-layer comparison at the close-up pose.
+try {
+  const off = regionStats(load('09-detail-closeup-off.png'), 200, 300, 1400, 850);
+  const on = regionStats(load('10-detail-closeup-on.png'), 200, 300, 1400, 850);
+  console.log(`detail-off hf=${off.hf}  detail-on hf=${on.hf}`);
+  check('detail normal adds high-frequency shading', on.hf > off.hf * 1.05,
+    `hf ${off.hf} -> ${on.hf}`);
+} catch {
+  console.log('skip detail-layer comparison (shots missing)');
 }
 
 // LOD colours must be visibly varied.

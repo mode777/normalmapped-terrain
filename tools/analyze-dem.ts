@@ -75,6 +75,17 @@ try {
   console.log('skip normal-map detail comparison (shots missing)');
 }
 
+// Same-pose detail-layer comparison at the close-up pose.
+try {
+  const off = regionStats(load('09-detail-closeup-off.png'), 200, 300, 1400, 850);
+  const on = regionStats(load('10-detail-closeup-on.png'), 200, 300, 1400, 850);
+  console.log(`detail-off hf=${off.hf}  detail-on hf=${on.hf}`);
+  check('detail normal adds high-frequency shading', on.hf > off.hf * 1.05,
+    `hf ${off.hf} -> ${on.hf}`);
+} catch {
+  console.log('skip detail-layer comparison (shots missing)');
+}
+
 try {
   const lod = regionStats(load('05-lod-debug.png'), 120, 300, 1200, 820);
   console.log(`lod-debug terrain=${JSON.stringify(lod)}`);
