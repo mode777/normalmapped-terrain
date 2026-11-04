@@ -140,8 +140,8 @@ the binary is at `~/.local/bin/openspec`.
    `uNormalTileCells = 512` for the normal UV. `T` in the UV formula is the
    *per-map* tile texel count, not always 64. This is the 8× resolution
    ratio (0.25 m normal texels vs 2 m mesh) that makes the detail visible.
-   The DEM page uses `normalScale = 2` (128² normal tiles, 512² layers) with
-   the same formula; do not hardcode 512/8 in shared code.
+   The DEM page uses `normalScale = 2` (128² normal tiles, 640² atlas layers)
+   with the same formula; do not hardcode 512/8 in shared code.
 9. **Every LOD snaps to its own spacing.** `snapLevelOrigins()` rounds each
    origin to a multiple of **its own** `S_L` (`origin_L = round(cam / S_L) *
    S_L`). A shared finest-level origin makes coarse vertices re-sample their
@@ -185,12 +185,13 @@ the binary is at `~/.local/bin/openspec`.
     ~160 MiB) — exactly the WebGL2 guaranteed minimum `MAX_TEXTURE_SIZE`, so
     `main.ts` throws rather than growing it.
 17. **DEM clipmap constants:** `S0=10 m`, `C=24` cells, `LEVELS=6`,
-    `normalScale=2`, outer radius 15.36 km over a 30.72 km checked-in window.
-    The manifest is the source of truth for the page config; do not hardcode
-    the dataset's spacing or normal scale in `dem.html` code.
+    `normalScale=2`, 5×5 cache, outer radius 15.36 km over a 30.72 km
+    checked-in window. The manifest is the source of truth for the page
+    config; do not hardcode the dataset's spacing or normal scale in
+    `dem.html` code.
 18. **Normal shading supports a one-layer LOD bias.** The DEM page sets
     `uNormalLodBias = 1`, sampling normal layer `max(vLevel - 1, 0)`; the
-    procedural page keeps 0. The 4×4 finer-layer cache covers the whole coarse
+    procedural page keeps 0. The 5×5 finer-layer cache covers the whole coarse
     ring, so this is safe. The boundary cross-fade target is `nLevel + 1` for
     `vLevel > 0`. Do not add GPU mipmaps to the tiled normal atlas: mips bleed
     across packed slots and would need a full-layer regenerate after every
@@ -229,7 +230,7 @@ the binary is at `~/.local/bin/openspec`.
   bake is ~7× the work of a 2× build. The pre-baked source fetches checked-in
   tiles with a bounded in-flight queue instead. The 4×4 cache covers the
   visible 3×3 ring plus a prefetch row/column; the infinite normal cache costs
-  ~160 MiB, the DEM one is much smaller (512² per layer).
+  ~160 MiB, the DEM one is much smaller (640² per layer, 5×5 slots).
 - The height function must stay a pure function of `(x, z)`; global passes
   (e.g. erosion simulation) would make streamed tiles disagree at their seams.
 - The checked-in DEM tiles are generated artifacts; change them by re-running

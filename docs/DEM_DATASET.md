@@ -21,7 +21,7 @@ real-world DEM.
 | LODs | 6 (`S0 = 10 m`) |
 | Tile size | 64 height samples |
 | Normal scale | 2× (5 m normal texels) |
-| Tile cache | 4 × 4 slots per LOD |
+| Tile cache | 5 × 5 slots per LOD |
 | Checked-in size | ~101 MB |
 
 The source is a **DTM** (bare earth), not a DSM. The elevation range in this

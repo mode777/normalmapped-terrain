@@ -95,7 +95,9 @@ export function configFromManifest(manifest: DemManifest): TerrainConfig {
     baseSpacing: manifest.baseSpacing,
     levels: manifest.levels,
     tileSize: manifest.tileSize,
-    cacheTiles: 4,
+    // The normal LOD bias samples layer L-1; a symmetric 5x5 window is
+    // required for that finer layer to cover the whole coarse ring.
+    cacheTiles: 5,
     normalScale: manifest.normalScale,
     heightScale: manifest.heightScale,
     centerCells: 24,

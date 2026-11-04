@@ -210,7 +210,7 @@ export const terrainFragmentShader: string = /* glsl */ `
 
     // ---- normal map, with an optional negative LOD bias -----------------
     // The DEM page sets uNormalLodBias to 1. The next-finer normal layer is
-    // resident in the 4x4 cache and covers the whole coarse ring, so this
+    // resident in the 5x5 cache and covers the whole coarse ring, so this
     // gives distant shading detail without mipmap bleeding across slots.
     float nLevel = max(vLevel - uNormalLodBias, 0.0);
     float nSpacing = uBaseSpacing * exp2(nLevel);

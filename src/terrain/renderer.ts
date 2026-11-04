@@ -121,7 +121,7 @@ export class ClipmapRenderer {
       uPixelScale: { value: 0.001 },
       uNormalStrength: { value: 1 },
       // Default to the geometric layer; the DEM scene opts into one finer
-      // layer, where the 4x4 cache covers the whole coarse ring.
+      // layer, where its 5x5 cache covers the whole coarse ring.
       uNormalLodBias: { value: 0 },
       uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
       uSunColor: { value: new THREE.Color(1, 0.97, 0.9) },
@@ -238,8 +238,12 @@ export class ClipmapRenderer {
     texture.type = THREE.UnsignedByteType;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
+    // The normal cache is a toroidal 5x5 atlas. Clamp only the outer atlas
+    // edge: internal slot boundaries are adjacent world tiles and should
+    // interpolate, but the wrap from slot 4 back to slot 0 is not spatially
+    // adjacent and must not blend.
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
     texture.generateMipmaps = false;
     texture.flipY = false;
     texture.unpackAlignment = 1;

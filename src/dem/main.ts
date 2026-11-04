@@ -56,6 +56,7 @@ export interface DemQA {
   setTileDebug(on: boolean): void;
   setWireframe(on: boolean): void;
   setCrackDebug(on: boolean): void;
+  setNormalLodBias(bias: number): void;
   waitForTiles(): Promise<void>;
   warpTo(x: number, z: number, y?: number | null): Promise<void>;
   groundHeight(): number;
@@ -380,6 +381,9 @@ function setupQA(): void {
     setCrackDebug: (on) => {
       renderer.setClearColor(on ? 0xff00ff : 0x0b0f14, 1);
       sky.visible = !on;
+    },
+    setNormalLodBias: (bias) => {
+      terrainRenderer.setNormalLodBias(bias);
     },
     waitForTiles: () => streamer.waitForDesired(flight.x, flight.z),
     warpTo: async (x, z, y = null) => {

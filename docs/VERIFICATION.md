@@ -55,7 +55,7 @@ than early builds; if it collapses toward ~1×, the normal layer/UV mapping or
 
 Reference values from the verified multi-noise terrain build (Nov 2026):
 160 resident tiles after streaming settles, 165k triangles, 4 draw calls,
-2 workers, normal-map `hf=9.16` vs flat `hf=0.23`, zero upload errors,
+2 workers, normal-map `hf=9.17` vs flat `hf=0.23`, zero upload errors,
 160 resident tiles after both 25 km and 500 km warps. The normal cache is
 2048 texels per side / ~160 MiB — the WebGL2 ceiling.
 
@@ -96,11 +96,13 @@ crack test, and a boundary view. `analyze-dem.ts` asserts:
 | `< 0.2 %` magenta in the crack shot | no gaps between clipmap rings |
 
 Reference values from the checked-in 2× dataset (Nov 2026): 3,080 tiles,
-~101 MB checked in, ~60 resident after priming, 96 resident after a warp,
-102k triangles, 4 draw calls, zero upload errors, normal-map `hf=2.24` vs
+~101 MB checked in, 61 resident after priming, 150 resident after a warp,
+102k triangles, 4 draw calls, zero upload errors, normal-map `hf=2.25` vs
 flat `hf=0.36`, and zero crack-test magenta. The DEM page sets
 `uNormalLodBias = 1`, so each ring samples the next-finer normal layer; the
-procedural page keeps the bias at 0. The 2× normal PNGs are ~24 KB each; see
+procedural page keeps the bias at 0. The 5×5 cache makes the finer layer cover
+the whole coarse ring, and the normal atlas clamps at its outer edge so the
+toroidal slot-4/slot-0 wrap cannot bleed. The 2× normal PNGs are ~24 KB each; see
 [DEM_DATASET.md](DEM_DATASET.md) for the source and bake details.
 
 The boundary shot (`08-boundary.png`) warps to `(6, 0) km`, beyond the old

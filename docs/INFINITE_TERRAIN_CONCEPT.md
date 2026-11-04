@@ -300,7 +300,7 @@ mapN   = normalize(vec3(nm.x * strength, nm.z, nm.y * strength))
 ```
 
 The DEM page sets `uNormalLodBias` to 1: each ring samples the next-finer
-normal layer, which is already resident in the 4×4 cache and covers the whole
+normal layer, which is already resident in the 5×5 cache and covers the whole
 coarse ring. The procedural page keeps the bias at 0. This is the
 tile-atlas-safe equivalent of a negative mipmap LOD bias; real mipmaps would
 bleed across packed slots.

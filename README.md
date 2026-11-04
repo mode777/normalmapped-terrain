@@ -66,9 +66,10 @@ baked offline by `tools/bake-dem.ts`, checked into
 `ClipmapRenderer` as the procedural page.
 
 - **Source:** Kartverket DTM 10 via the Geonorge WCS, EPSG:25833, CC BY 4.0.
-- **Grid:** 10 m, 6 LODs, 2× normal resolution, 3,080 tiles, ~101 MB checked
-  in. The 2× normal PNGs dominate the size; the fragment shader biases each
-  ring to the next-finer normal layer for sharper distant shading.
+- **Grid:** 10 m, 6 LODs, 2× normal resolution, 5×5 cache, 3,080 tiles,
+  ~101 MB checked in. The 2× normal PNGs dominate the size; the fragment
+  shader biases each ring to the next-finer normal layer for sharper distant
+  shading.
 - **Bake tool:** Node + `geotiff` + `proj4` + `pngjs`; no GDAL. All LODs come
   from one height grid, and normals use a one-texel halo so tile edges are
   continuous.

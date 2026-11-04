@@ -98,7 +98,7 @@ interface TileSource {
 }
 ```
 
-`TileCache` owns the desired 4×4 window, priority sort, stale-request cancellation, slot state, upload errors, `prime()`, and `waitForDesired()`. It allows a small fixed number of in-flight source promises (4 is a reasonable default; the procedural source internally limits itself to its two workers). A stale result is discarded without upload; a failed result is reported once and recorded so it is not retried in a tight loop.
+`TileCache` owns the desired `cacheTiles × cacheTiles` window (4×4 for the procedural page, 5×5 for the DEM page), priority sort, stale-request cancellation, slot state, upload errors, `prime()`, and `waitForDesired()`. It allows a small fixed number of in-flight source promises (4 is a reasonable default; the procedural source internally limits itself to its two workers). A stale result is discarded without upload; a failed result is reported once and recorded so it is not retried in a tight loop.
 
 The procedural source moves the current worker-pool logic out of `TileStreamer`. The worker protocol is simplified: `init` carries the seed plus the `TerrainConfig` generation fields; tile requests carry only `id`, `level`, `tx`, `ty`. The worker keeps its height field and config for its lifetime. This removes the current per-tile repetition of `tileSize`, `baseSpacing`, `heightScale`, and `normalScale`.
 
@@ -148,7 +148,7 @@ Kartverket WCS (EPSG:25833)
 
 **Normals.** For each tile at LOD `L`, sample a `(64·normalScale + 2)²` halo at `normalSpacing = S_L / normalScale` from the same global grid using bilinear interpolation. Call the shared `bakeTileNormals(halo, normalTileSize, normalSpacing, heightScale)`. The halo means the normals adjacent to a tile boundary are computed from the same world samples as the neighbour, so the normal field is continuous after RGB8 quantization. The bake tool compares boundary-adjacent normals against a reference recomputation from the global grid and writes a seam report; `test:dem` verifies the report and can rebake a deterministic sample of boundary tiles.
 
-**Normal LOD bias.** The fragment shader samples normal layer `max(vLevel - uNormalLodBias, 0)`; the DEM page sets the bias to 1, so distant rings use the next-finer normal layer that is already resident in the 4×4 cache. The procedural page keeps 0. The boundary cross-fade target is `nLevel + 1` for `vLevel > 0`, matching the child ring's biased layer; level 0 has no finer layer and does not cross-fade. This is the tile-atlas-safe equivalent of a negative mipmap LOD bias: actual mipmaps would bleed across the packed tile slots and require a full-layer regenerate after every `texSubImage3D`.
+**Normal LOD bias.** The fragment shader samples normal layer `max(vLevel - uNormalLodBias, 0)`; the DEM page sets the bias to 1, so distant rings use the next-finer normal layer that is already resident in the symmetric 5×5 cache. The procedural page keeps 0. The boundary cross-fade target is `nLevel + 1` for `vLevel > 0`, matching the child ring's biased layer; level 0 has no finer layer and does not cross-fade. This is the tile-atlas-safe equivalent of a negative mipmap LOD bias: actual mipmaps would bleed across the packed tile slots and require a full-layer regenerate after every `texSubImage3D`.
 
 **Heights.** Height tiles store `uint16 = round(normalizedHeight * 65535)`. The runtime converts to `Float32Array` and the cache converts to the renderer's `R16F` upload. The source's minimum is ~0.19 after normalization, which is fine for the existing material bands.
 
