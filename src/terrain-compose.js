@@ -1,8 +1,7 @@
 /**
  * Shared terrain composition: multi-noise channels mapped through spline
  * response curves, iterated domain warping and anisotropic mountain
- * "spines". Used by both the finite dataset (src/terrain-data.js) and the
- * infinite heightfield (src/infinite/heightfield.js).
+ * "spines". Used by the infinite heightfield (src/infinite/heightfield.js).
  *
  * Why not plain fBM: summed octaves are statistically the same everywhere —
  * rounded hills, no plains-vs-peaks contrast, no directed structure. See
@@ -137,7 +136,7 @@ export const RELIEF_CURVE_POINTS = [
 ];
 
 /**
- * Builds the seeded height function shared by both PoCs.
+ * Builds the seeded height function used by the infinite terrain.
  *
  * @param {object} cfg
  * seed                   PRNG seed; same seed ⇒ same world.

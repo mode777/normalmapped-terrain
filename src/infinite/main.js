@@ -26,7 +26,7 @@ import {
   debugVertexShader,
   debugFragmentShader,
 } from './shaders.js';
-import { skyVertexShader, skyFragmentShader } from '../shaders.js';
+import { skyVertexShader, skyFragmentShader } from '../sky-shaders.js';
 import { FlightController } from './flight.js';
 import { initUI } from './ui.js';
 

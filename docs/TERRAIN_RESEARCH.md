@@ -1,7 +1,7 @@
 # Terrain composition research
 
-Why the original Perlin-fBM terrain looked bland, what the literature and
-shipped games do about it, and what this repo adopted (and rejected). Written
+Why plain Perlin-fBM terrain looks bland, what the literature and shipped
+games do about it, and what this repo adopted (and rejected). Written
 November 2026 while replacing the plain fBM composition with the current
 multi-noise/spline/warp pipeline in `src/terrain-compose.js`.
 
@@ -94,8 +94,8 @@ The old code had a single warp level and an isotropic mask — the classic
 
 ### 3. Hydraulic erosion simulation — NOT ADOPTED (documented for later)
 
-The single biggest realism jump available for a *finite, whole-map*
-heightfield: droplets flow downhill, erode with a bell brush, carry sediment
+The single biggest realism jump available for a whole-map heightfield:
+droplets flow downhill, erode with a bell brush, carry sediment
 up to a capacity ∝ slope·speed·water, deposit when capacity drops. Dendritic
 gullies, carved valleys and depositional fans *emerge* — no authoring.
 
@@ -126,14 +126,11 @@ References, in the order you want to read them:
   a threshold to their lowest neighbour; cheap complement that rounds
   cliff-base scree.
 
-Why not adopted now (user decision, Nov 2026): it is a whole-map, non-local
-pass. The infinite page *cannot* have it — the height function must stay pure
-per (x, z) or streamed tiles disagree at their seams (ranmantaru notes this
-explicitly: "not suitable for 'infinite' generated worlds"). The finite page
-*could* run it between generation and the normal-map bake (~2-4 s extra load
-in JS for 2048² at ~100k droplets), and that remains the recommended next
-step if the finite terrain should look more eroded. A hybrid would also work:
-erode a 512² coarse field, upsample, and re-add the fine octave stack on top.
+Why not adopted: it is a whole-map, non-local pass. The infinite page
+*cannot* have it — the height function must stay pure per (x, z) or streamed
+tiles disagree at their seams (ranmantaru notes this explicitly: "not
+suitable for 'infinite' generated worlds"). Terrain variety therefore comes
+from composition alone.
 
 ### 4. River networks, inverse generation — NOT ADOPTED
 
@@ -176,33 +173,10 @@ height(p) = baseSpline(continent(p))                    // elevation tiers
 - Detail octaves scaled by relief×roughness: flats read as depositional
   ground (clean), crests read as young rock (rough) — a cheap stand-in for
   the erosion contrast we did not simulate.
-- Finite page: one detail layer (64 m wavelength, ~6 m relief) supplies rock
-  micro-relief below the 192² mesh's 94 m Nyquist but fully resolved by the
-  4.4 m/px heightfield, plus the square edge falloff. The boot camera is an
-  overlook of the ridge chain the seed places south of centre. Measured
-  distribution over the 9 km tile: 12% basin (<0.1), 41% lowland, 38%
-  upland, 3.1% snowline (>0.58 ≈ 840 m), max 0.855 ≈ 1240 m — versus the
-  old fBM's compressed, uniform profile.
-- Infinite page: same composition at 45 km continent wavelength plus four
-  sub-vertex detail layers (714/154/40/17 m) that live almost entirely in
-  the 8× normal map. Seed 20260217 was picked by scoring the spawn view
-  corridor for height variance (std 0.110, peaks 0.82 in the first frames).
+- Same composition at a 45 km continent wavelength plus four sub-vertex
+  detail layers (714/154/40/17 m) that live almost entirely in the 8× normal
+  map. Seed 20260217 was picked by scoring the spawn view corridor for
+  height variance (std 0.110, peaks 0.82 in the first frames).
 
-Cost: ~27 noise evaluations per sample on the finite page (was 19), ~36 on
-the infinite page (was 29); generation remains within the "few seconds" load
-budget on commodity hardware (≈10 s for 2048² on the slow verification
-container, well under half that on a typical laptop), tile streaming still
-worker-bound.
-
-## If we revisit erosion later (sketch)
-
-1. Generate the composed base field as now (keep `terrain-compose.js`).
-2. Run ranmantaru droplets (start: 100k droplets, brush radius 3, the
-   defaults above) on a *half-resolution* grid (1024²), chunked with progress
-   like `generateProcedural` does.
-3. Upsample bilinearly to 2048², then re-add the two finest ridge octaves and
-   the detail stack so the normal map keeps sub-simulation detail.
-4. Bake normals from the eroded float field — no other pipeline change is
-   needed; the Sobel bake is agnostic.
-5. Keep a seed-stable droplet order (same `mulberry32` PRNG) so the dataset
-   stays deterministic per seed.
+Cost: ~36 noise evaluations per sample; tile generation stays worker-bound,
+and the 8× normal bake dominates the streaming budget.

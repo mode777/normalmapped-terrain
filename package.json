@@ -1,14 +1,13 @@
 {
   "name": "normalmapped-terrain",
   "version": "1.0.0",
-  "description": "PoC: normal-map-driven terrain shading in Three.js — low-poly mesh lit by a high-res normal map in the pixel shader",
+  "description": "PoC: infinite Three.js clipmap terrain with vertex-shader height displacement and normal maps streamed from a toroidal tile cache",
   "type": "module",
   "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "terrain:grand-canyon": "node tools/build-real-terrain.mjs",
     "test:infinite": "node tools/test-infinite.mjs",
     "deploy": "bash scripts/deploy.sh"
   },

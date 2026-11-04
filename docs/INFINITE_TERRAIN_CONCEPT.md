@@ -2,11 +2,10 @@
 
 Status: **implemented and verified** (see [Implementation notes](#13-implementation-notes)).
 
-This document proposes a second PoC for this repo: a fly-over of a
+This document describes the repo's clipmap terrain PoC: a fly-over of a
 practically infinite terrain built from clipmap meshes, with height and
-normal maps sampled from a dynamically updated GPU texture buffer. It keeps
-the previous PoC intact and reuses its heightfield → Sobel → object-space
-normal-map workflow.
+normal maps sampled from a dynamically updated GPU texture buffer. It uses
+the heightfield → Sobel → object-space normal-map workflow described here.
 
 ## 1. Goal
 
@@ -15,7 +14,7 @@ building a full terrain mesh on the CPU.
 
 The claim to demonstrate:
 
-> A small set of camera-centred clipmap rings (about 114k triangles total)
+> A small set of camera-centred clipmap rings (about 165k triangles total)
 > can render an effectively infinite landscape if heights are displaced in
 > the vertex shader from a tile cache and the lighting normals come from
 > per-pixel normal maps baked from the same float heightfield.
@@ -24,15 +23,14 @@ Non-goals:
 
 - A production GIS viewer or a real-Earth streaming service.
 - Water, vegetation, physics, collision, or shadow maps.
-- Replacing the existing normal-map PoC. The new page is additive.
-- An A/B vertex-normal comparison on the new page. The first PoC already
-  proves that; this page always lights from the normal map.
+- An A/B vertex-normal comparison. This page always lights from the normal
+  map; there is no vertex-normal fallback mode.
 
 ## 2. Locked decisions
 
 | Area | Decision |
 |---|---|
-| Page location | New `infinite.html` in this repo/site; existing `index.html` untouched |
+| Page location | Root `infinite.html` in this repo/site |
 | Height source | Procedural infinite only (seeded multi-noise composition), no network |
 | Tile generation | Web Worker, CPU float heights + Sobel normals, sub-texture uploads |
 | LOD seams | Per-LOD origin snapping + one-cell pad, shader clip to the parent square, coarse-mesh morph band, skirt at the final horizon edge |
@@ -54,7 +52,7 @@ The constants are configurable; the mobile-friendly values are the defaults.
             (height 256², normal 2048² texels/LOD)
                                      │  texSubImage3D
                                      ▼
-              DataArrayTexture  [height R16F | normal RGBA8 @ 4x]
+              DataArrayTexture  [height R16F | normal RGBA8 @ 8x]
                                      │
              ┌───────────────────────┴───────────────────────┐
              │ vertex shader                                 │ fragment shader
@@ -62,7 +60,7 @@ The constants are configurable; the mobile-friendly values are the defaults.
              │ displace clipmap vertex                        │ shade with world-space normal
              └───────────────────────┬───────────────────────┘
                                      ▼
-                 9 camera-centred clipmap rings + centre block
+                10 camera-centred clipmap rings + centre block
 ```
 
 ## 4. Clipmap geometry
@@ -91,7 +89,7 @@ With the values above the last ring reaches `2·24·2·2^9 = 49,152 m`
 (49 km). Fog is tuned so the last ring is already fully faded before its
 outer edge, which hides the end of the world.
 
-Triangle budget (`C = 24`, `LEVELS = 8`):
+Triangle budget (`C = 24`, `LEVELS = 10`):
 
 | Part | Triangles |
 |---|---:|
@@ -104,8 +102,7 @@ Triangle budget (`C = 24`, `LEVELS = 8`):
 
 That is still modest: the detail comes from the normal map, not from the
 triangle count. The near field uses 2 m vertices, while the normal map
-supplies **1 m** detail — an 8× resolution ratio, and 4.4× finer in absolute
-terms than the first PoC's normal map.
+supplies **0.25 m** texels — an 8× resolution ratio.
 
 ### 4.2 Why nested rings with 2:1 steps
 
@@ -172,7 +169,7 @@ For each LOD `L`:
 - height layer: `R16F`, normalized height in `[0,1]` (core-filterable in
   WebGL2; the half-float step is well below the 2 m vertex spacing)
 - normal layer: `RGBA8`, object-space normal encoded
-  `R=N.x`, `G=N.z`, `B=N.y` (same convention as the existing PoC)
+  `R=N.x`, `G=N.z`, `B=N.y` (object-space, no TBN)
 
 Both are WebGL2 `DataArrayTexture`s with `LEVELS` layers:
 
@@ -228,7 +225,7 @@ A tile at LOD `L` contains:
   patch (one-sample halo), so Sobel normals at tile edges agree with the
   neighbouring tile;
 - height in normalized `[0,1]`, normals quantised to RGB8 only after
-  computing the unit normal from float heights (the existing PoC's rule).
+  computing the unit normal from float heights.
 
 At LOD `L` the Sobel scale is `heightScale / (8·(S_L/8))`. Fine levels
 recover fine shading detail; coarse levels are naturally band-limited, which
@@ -243,8 +240,8 @@ is desirable for distance.
    `(slotX·512, slotY·512, level)`.
 4. Slot bookkeeping records which world tile currently occupies each slot.
 
-No GPU render-to-texture is required. CPU generation reuses the existing
-float Sobel code and keeps the pipeline deterministic.
+No GPU render-to-texture is required. CPU generation uses the float Sobel
+bake and keeps the pipeline deterministic.
 
 ### 5.5 On-demand generation
 
@@ -299,9 +296,9 @@ nm    = texture(uNormalArray, vec3(uv, level)).xyz * 2 - 1
 mapN  = normalize(vec3(nm.x * strength, nm.z, nm.y * strength))
 ```
 
-Lighting, albedo bands, specular, fog and sky reuse the existing PoC's
-palette and style. Slope-based rock/grass/snow assignment uses the normal
-map normal, so normal-map detail also drives material boundaries.
+Lighting, albedo bands, specular, fog and sky follow the shared terrain
+palette. Slope-based rock/grass/snow assignment uses the normal-map normal,
+so normal-map detail also drives material boundaries.
 
 LOD normal seam: the normal map's resolution changes at ring boundaries. A
 narrow cross-fade band in the fragment shader samples both layer `L` and
@@ -311,7 +308,7 @@ tests.
 
 ### 6.3 Height/normal encoding invariants
 
-Keep the first PoC's conventions:
+The encoding invariants are:
 
 - heightfield row `j` maps to `+z`, column `i` to `+x`;
 - normal map is object-space, `R=N.x`, `G=N.z`, `B=N.y`, no TBN;
@@ -355,12 +352,9 @@ Stats chip:
 - resident tiles, generated tiles, queued tiles;
 - current LOD extents.
 
-The page links back to the original normal-map PoC. The original page gets a
-link to the new page.
-
 ## 9. Verification plan
 
-Before shipping, the page must pass a headless loop like the existing PoC:
+Before shipping, the page must pass a headless loop:
 
 1. **Unit checks** (Node, no browser):
    - same world point sampled from adjacent tiles at the same LOD gives the
@@ -396,7 +390,7 @@ draw calls/triangles/tile counts if no GPU is available).
 | Visible LOD normal seam | Cross-fade band; test at ring boundaries |
 | Tile generation hitch on tile crossings | Worker + prefetch margin + priority queue |
 | Floating-origin / tile-phase drift after long flights | `PHASE_WRAP` modulo + warp tests at 25/500 km |
-| Vite multi-page paths on GitHub Pages | Root `infinite.html`, relative `base: './'`, test the built site |
+| Vite paths on GitHub Pages | Root `infinite.html`, relative `base: './'`, test the built site |
 | Scope creep | Ship the flyover + normal-map proof first; defer water/vegetation/shadows |
 
 ## 11. Proposed milestones

@@ -8,7 +8,6 @@ export default defineConfig({
     assetsInlineLimit: 8192,
     rollupOptions: {
       input: {
-        main: resolve(process.cwd(), 'index.html'),
         infinite: resolve(process.cwd(), 'infinite.html'),
       },
     },

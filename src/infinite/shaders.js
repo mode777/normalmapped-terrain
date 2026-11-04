@@ -3,7 +3,7 @@
  *
  * Height is displaced in the vertex shader from a sampler2DArray whose layer
  * is the clipmap LOD. The fragment shader samples the matching normal-map
- * layer. The same object-space encoding as the first PoC is used:
+ * layer. The object-space encoding is:
  *   R = N.x (east), G = N.z (+z), B = N.y (up)
  * so no TBN matrix is needed.
  *
@@ -257,9 +257,9 @@ export const terrainFragmentShader = /* glsl */ `
     float snowW  = smoothstep(uSnowStart, uSnowStart + 0.14, hn + hv * 0.08);
     float steep  = smoothstep(0.42, 0.72, slope);
 
-    // Rock is the base material. The original PoC started from grass*grassW,
-    // which goes black once the grass band fades out on high ground; with an
-    // infinite world that would leave whole massifs unlit.
+    // Rock is the base material. Starting from grass*grassW instead would go
+    // black once the grass band fades out on high ground, leaving whole
+    // massifs unlit.
     vec3 albedo = rock;
     albedo = mix(albedo, grass, grassW * (1.0 - steep * 0.65));
     albedo = mix(albedo, sand, sandW * (1.0 - steep));

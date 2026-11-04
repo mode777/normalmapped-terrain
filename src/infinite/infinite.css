@@ -32,13 +32,6 @@
   pointer-events: none;
 }
 
-#panel a {
-  color: var(--accent);
-  text-decoration: none;
-  border-bottom: 1px dotted rgba(76, 201, 240, .45);
-}
-#panel a:hover { border-bottom-color: var(--accent); }
-
 .wide-btn {
   width: 100%;
   margin-top: 8px;

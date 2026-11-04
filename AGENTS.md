@@ -4,17 +4,12 @@ Guidance for AI coding agents (and humans in a hurry) working in this repo.
 
 ## What this repo is
 
-Two proof-of-concept renderers in one repo:
+One proof-of-concept renderer:
 
-1. **`index.html`** — a finite terrain with a low-poly mesh whose lighting
-   comes from a high-resolution normal map baked from a heightfield. Offers
-   A/B/C (vertex normals / normal map / high-res reference), split-screen,
-   and two datasets (procedural multi-noise composition + real Grand Canyon
-   SRTM).
-2. **`infinite.html`** — camera-centred clipmap rings over an effectively
-   infinite procedural world. Heights are displaced in the vertex shader;
-   normals come from a toroidal per-LOD tile cache in `DataArrayTexture`s;
-   the camera free-flies over the terrain.
+- **`infinite.html`** — camera-centred clipmap rings over an effectively
+  infinite procedural world. Heights are displaced in the vertex shader;
+  normals come from a toroidal per-LOD tile cache in `DataArrayTexture`s; the
+  camera free-flies over the terrain.
 
 Ship anything visual only after verifying it renders — see
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
@@ -23,19 +18,14 @@ Ship anything visual only after verifying it renders — see
 
 ```bash
 npm install
-npm run dev                     # vite dev server
+npm run dev                     # vite dev server; open /infinite.html
 npm run build                   # production build -> dist/
 npm run deploy                  # build + force-push dist/ to gh-pages
-
-npm run terrain:grand-canyon    # re-download & bake SRTM data -> public/data/
-node tools/build-real-terrain.mjs --name matterhorn --lat 45.9763 --lon 7.6586
 
 npm run test:infinite           # Node-only tile/LOD/normal math checks
 npx vite preview                # serve dist/ locally on :4173
 
 # headless QA (needs chrome-headless-shell + puppeteer-core, see docs/VERIFICATION.md)
-node tools/screenshot.mjs --url http://127.0.0.1:4173/ --out shots
-node tools/analyze-shots.mjs shots
 node tools/screenshot-infinite.mjs --url http://127.0.0.1:4173/infinite.html --out shots-infinite
 node tools/analyze-infinite.mjs shots-infinite
 ```
@@ -45,13 +35,9 @@ node tools/analyze-infinite.mjs shots-infinite
 | Path | Purpose |
 |---|---|
 | `src/perlin.js` | Seeded improved Perlin, fBM, ridged multifractal |
-| `src/terrain-compose.js` | Shared terrain composition: multi-noise channels, spline response curves, iterated domain warp, anisotropic ridge spines |
-| `src/terrain-data.js` | Dataset builders; **owns the dataset object shape** |
-| `src/normalmap.js` | Sobel normal-map baking — core of the PoC |
-| `src/geometry.js` | Displaced grid mesh + `computeVertexNormals` (the baseline) |
-| `src/shaders.js` | Custom vertex/fragment shaders — core of the PoC |
-| `src/main.js` | Scene, modes (A/split/B/C), split scissor rendering, sun, caches |
-| `src/ui.js` | DOM control wiring; `initUI(callbacks)` returns a setter API |
+| `src/terrain-compose.js` | Multi-noise channels, spline response curves, iterated domain warp, anisotropic ridge spines |
+| `src/sky-shaders.js` | Sky gradient + sun disc/halo shaders |
+| `src/styles.css` | Shared UI chrome (panels, stats, sliders, loading overlay) |
 | `src/infinite/heightfield.js` | Infinite seeded height function + per-tile float-Sobel normal baking |
 | `src/infinite/origins.js` | Per-LOD clipmap origins: each level snaps to its own spacing |
 | `src/infinite/terrain-worker.js` | Worker wrapper around `generateTile` (transfers buffers) |
@@ -60,53 +46,31 @@ node tools/analyze-infinite.mjs shots-infinite
 | `src/infinite/shaders.js` | Clipmap vertex/fragment shaders + LOD/tile debug views |
 | `src/infinite/flight.js` | Free-fly / auto-cruise camera in absolute world doubles |
 | `src/infinite/main.js` | Infinite scene, floating origin, texture arrays, UI, stats |
-| `infinite.html` | Second PoC entry page |
-| `tools/build-real-terrain.mjs` | Node script: Mapzen terrarium tiles → uint16 `.bin` + `.json` |
+| `src/infinite/ui.js` | DOM control wiring; `initUI(callbacks)` returns a setter API |
+| `src/infinite/infinite.css` | Page-specific additions to `src/styles.css` |
+| `infinite.html` | The PoC entry page |
 | `tools/test-infinite.mjs` | Node-only tile/LOD/normal math checks |
-| `tools/screenshot.mjs` | Headless-browser QA screenshot driver (first PoC) |
 | `tools/screenshot-infinite.mjs` | Headless QA driver for `infinite.html` |
-| `tools/analyze-infinite.mjs` | Pixel/console assertions for the infinite-terrain shots |
-| `tools/analyze-shots.mjs` | Pixel-statistics assertions on the first PoC's screenshots |
-| `public/data/` | Committed Grand Canyon heightfield (uint16 LE) + metadata JSON |
-| `docs/` | PIPELINE.md (the math), TERRAIN_RESEARCH.md (composition survey), INFINITE_TERRAIN_CONCEPT.md, VERIFICATION.md |
-
-## Dataset object shape (terrain-data.js)
-
-Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
-
-```js
-{
-  id, name,
-  res,               // samples per side
-  worldSizeX,        // metres covered along x (columns)
-  worldSizeZ,        // metres along z (rows)
-  heightScale,       // metres for heights going 0 -> 1
-  heights,           // Float32Array res*res, normalised 0..1
-  defaultView,       // OPTIONAL { position:[x,y,z], target:[x,y,z] } camera
-                     // framing for this dataset (metres); generic diagonal
-                     // view if absent (src/main.js setDataset)
-  credit,            // string shown in the UI
-  info,              // string[] shown in the UI
-}
-```
+| `tools/analyze-infinite.mjs` | Pixel/console assertions for the screenshots |
+| `docs/` | INFINITE_TERRAIN_CONCEPT.md, TERRAIN_RESEARCH.md, VERIFICATION.md |
 
 ## Critical invariants — breaking these silently ruins the render
 
 1. **Coordinate/texture convention.** Heightfield row `j` maps to **+z**,
-   column `i` maps to **+x**; geometry UV `(u, v)` maps to `(x, z)` the same
-   way; normal-map `DataTexture`s use `flipY = false`. Generator, mesh builder
-   and shader all assume this. Change one, change all three.
-2. **Normal-map encoding is object-space, R=east, G=south(+z), B=up.** Decoded
-   in the shader as `mapN = vec3(nm.x, nm.z, nm.y)` (→ x, up, z). There is
-   deliberately **no TBN matrix** — the terrain is an unrotated heightfield,
-   so local frame == world frame. Do not "fix" this by adding tangent space.
+   column `i` maps to **+x**; the shaders use the same mapping. Array textures
+   use `flipY = false`. Generator, mesh builder and shader all assume this.
+   Change one, change all three.
+2. **Normal-map encoding is object-space, R=east, G=south(+z), B=up.**
+   Decoded in the shader as `mapN = vec3(nm.x, nm.z, nm.y)` (→ x, up, z).
+   There is deliberately **no TBN matrix** — the terrain is an unrotated
+   heightfield, so local frame == world frame. Do not "fix" this by adding
+   tangent space.
 3. **Bake normals from float data, never from an 8-bit heightmap.** Quantised
    heights terrace the gradients. Only the unit-length normals themselves may
    be quantised to RGB8.
-4. **Sobel gradient scaling** (`src/normalmap.js`): response must be divided
-   by `8 * pixelSpacing` (Sobel sums weight ±spacing across 4 taps) and
+4. **Sobel gradient scaling** (`src/infinite/heightfield.js`): response must be
+   divided by `8 * pixelSpacing` (Sobel sums weight ±spacing across 4 taps) and
    multiplied by `heightScale` before forming `N ∝ (-dh/dx, 1, -dh/dz)`.
-   See docs/PIPELINE.md for the derivation.
 5. **`uNormalStrength` is applied to the decoded tangent components**, then
    renormalised in the shader. That is mathematically equivalent to re-baking
    with a different strength — keep it that way; do not regenerate the map on
@@ -115,38 +79,28 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
    tonemapping/colorspace helpers into every fragment shader; including the
    pars chunks again causes duplicate GLSL definitions. Only
    `#include <tonemapping_fragment>` / `<colorspace_fragment>` are safe.
-7. **Modes share one `ShaderMaterial`.** Mode switching only touches
-   `uNormalBlend` (and the geometry swap for mode C). Split-screen renders
-   twice with scissor test — full viewport both passes so the projection is
-   identical on both sides of the divider.
-8. **Mesh ≥ mode-C reference is `min(1024, res >> 1)`** so the reference
-   never exceeds half the data resolution (a mesh finer than its data adds
-   nothing but triangles).
-
-### Infinite-terrain invariants (`infinite.html`)
-
-9. **Tile cache is toroidal.** World tile `(tx,ty)` always lives in slot
+7. **Tile cache is toroidal.** World tile `(tx,ty)` always lives in slot
    `(tx mod K, ty mod K)`. The shader reproduces this with
    `slot = mod(floor(t), uCacheTiles)`, the half-texel offset, and
    `uRenderOrigin` passed **modulo `PHASE_WRAP`**. Do not pass absolute
    world coordinates or shift texture data on camera movement.
-10. **Height and normal caches have different texel sizes but the same world
-    tile.** Height is 64² at `S_L`; normal is 512² at `S_L/8` (`normalScale
-    = 8`). The shader uses `uTileCells = 64` for the height UV and
-    `uNormalTileCells = 512` for the normal UV. `T` in the UV formula is the
-    *per-map* tile texel count, not always 64. This is the 8× resolution
-    ratio (0.25 m normal texels vs 2 m mesh) that makes the detail visible.
-11. **Every LOD snaps to its own spacing.** `snapLevelOrigins()` rounds each
-    origin to a multiple of **its own** `S_L` (`origin_L = round(cam / S_L) *
-    S_L`). A shared finest-level origin makes coarse vertices re-sample their
-    height tile at sub-texel positions as the camera moves: the surface
-    "swims". The independent origins differ by 0 or ±`S_L/2` — the pad in
-    (13) relies on that bound. Do not cascade or share them.
-12. **`RENDER_ORIGIN_STEP` must be a multiple of every `S_L` and divide
+8. **Height and normal caches have different texel sizes but the same world
+   tile.** Height is 64² at `S_L`; normal is 512² at `S_L/8` (`normalScale
+   = 8`). The shader uses `uTileCells = 64` for the height UV and
+   `uNormalTileCells = 512` for the normal UV. `T` in the UV formula is the
+   *per-map* tile texel count, not always 64. This is the 8× resolution
+   ratio (0.25 m normal texels vs 2 m mesh) that makes the detail visible.
+9. **Every LOD snaps to its own spacing.** `snapLevelOrigins()` rounds each
+   origin to a multiple of **its own** `S_L` (`origin_L = round(cam / S_L) *
+   S_L`). A shared finest-level origin makes coarse vertices re-sample their
+   height tile at sub-texel positions as the camera moves: the surface
+   "swims". The independent origins differ by 0 or ±`S_L/2` — the pad in
+   (11) relies on that bound. Do not cascade or share them.
+10. **`RENDER_ORIGIN_STEP` must be a multiple of every `S_L` and divide
     `PHASE_WRAP`** (it is `S0 · 2^(levels+1)`). Only then do level vertices
     land on exact height-texel centres; otherwise every level samples at a
     static half-texel bias.
-13. **Rings are padded one cell and clipped to the parent square.** The
+11. **Rings are padded one cell and clipped to the parent square.** The
     level-0 ring uses hole `C` and abuts the centre block (same lattice, no
     clipping). Rings 1+ use hole `C-1` and discard fragments inside the
     parent's outer square, with a slack that grows with the pixel footprint.
@@ -154,24 +108,24 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
     stops the coarse ring drawing over the fine one. There is **no stitch
     geometry** — it would need the exact alignment per-level snapping gives
     up.
-14. **The outer `morphCells` cells morph into the next-coarse height, sampled
+12. **The outer `morphCells` cells morph into the next-coarse height, sampled
     through the coarse mesh's triangulation** (`coarseMeshHeight`), not
     bilinearly. Bilinear disagrees with the coarse triangles by up to the
     LOD error; with a half-cell origin offset that opens slivers at the ring
     boundary when seen at a grazing angle. If you change the diagonal in
     `buildRingGeometry`, change it here too.
-15. **Upload height with `texSubImage3D`, not `copyTextureToTexture`.**
+13. **Upload height with `texSubImage3D`, not `copyTextureToTexture`.**
     `copyTextureToTexture` produced `GL_INVALID_OPERATION` for R16F array
     layers on SwiftShader. `_rawUpload` also explicitly sets
     `UNPACK_FLIP_Y_WEBGL=false`; keep it.
-16. **Normal maps are always on.** The infinite page deliberately has **no
-    vertex-normal A/B**; the first PoC already proves that comparison.
-    `uNormalStrength` still scales decoded tangent components.
-17. **Floating origin rebases at ~15 km.** `renderOrigin` is a 2D world
+14. **Normal maps are always on.** The page deliberately has **no
+    vertex-normal A/B**; `uNormalStrength` still scales decoded tangent
+    components.
+15. **Floating origin rebases at ~15 km.** `renderOrigin` is a 2D world
     origin; `uRenderOrigin` is `renderOrigin mod PHASE_WRAP` (largest cache
     world size). The camera stays in small render-space coordinates. Do not
     remove the modulo or long flights lose tile phase.
-18. **Clipmap constants:** `S0=2 m`, `C=24` cells, `LEVELS=10`, outer radius
+16. **Clipmap constants:** `S0=2 m`, `C=24` cells, `LEVELS=10`, outer radius
     ≈49 km, height tile 64², normal tile 512², cache 4×4, `morphCells=3`.
     Ring `L` covers `[C·S_L, 2C·S_L]` = `[48·2^L, 96·2^L] m`; the last ring
     gets the only real skirt. Do not reduce `normalScale` without re-checking
@@ -183,41 +137,35 @@ Everything downstream (baking, meshing, shading) is agnostic; keep this shape:
 - ES modules everywhere, no TypeScript, no linter config yet — match the
   existing style (small modules, JSDoc-ish comments on tricky math).
 - Runtime dependencies: `three` only. `vite`/`pngjs` are devDependencies
-  (pngjs is Node-only, used by tools/). Keep it that way unless there's a
-  strong reason.
+  (`pngjs` is Node-only, used by `tools/analyze-infinite.mjs`). Keep it that
+  way unless there's a strong reason.
 - Perf-relevant constants (noise-evaluation count per height sample in
-  `terrain-compose.js` — ~25 finite / ~36 infinite, 2048² heightfield, LRU
-  cache size of 10 geometries, infinite-page `S0`/`LEVELS`/`normalScale`)
-  were chosen to keep load < a few seconds and tile streaming hitch-free.
-  Adding channels costs every tile bake; profile before loosening them.
-- The infinite page's tile generation **must stay in workers**; generating
-  64² height / 512² normal tiles on the main thread causes visible hitches at
-  tile crossings. The streamer uses up to 2 workers because the 8× normal
-  bake is ~7× the work of the original 2× version. The 3×3 cache exactly
-  covers the visible ring; if fast flight shows tile pops, go to 4×4 (and
-  budget ~128 MiB for the normal cache instead of ~72 MiB).
-- The Grand Canyon heightfield is **committed** (`public/data/`) so the site
-  needs no network beyond GitHub Pages. Regenerating requires internet access
-  to `s3.amazonaws.com/elevation-tiles-prod`.
-- Vertical exaggeration of the real dataset lives in the metadata
-  (`exaggeration`, folded into `heightScale`); the UI credit string discloses
-  it. If you change it, keep the disclosure honest.
+  `terrain-compose.js` — ~36, and the infinite-page `S0`/`LEVELS`/`normalScale`)
+  were chosen to keep tile streaming hitch-free. Adding channels costs every
+  tile bake; profile before loosening them.
+- The tile generation **must stay in workers**; generating 64² height /
+  512² normal tiles on the main thread causes visible hitches at tile
+  crossings. The streamer uses up to 2 workers because the 8× normal bake is
+  ~7× the work of a 2× build. The 4×4 cache covers the visible 3×3 ring plus a
+  prefetch row/column; the normal cache costs ~128 MiB.
+- The height function must stay a pure function of `(x, z)`; global passes
+  (e.g. erosion simulation) would make streamed tiles disagree at their seams.
 - Commits: concise imperative subject lines, e.g. `Fix Sobel z-gradient sign`.
 - Deploy = `npm run deploy` (orphan gh-pages branch from `dist/`). Pages is
   served from the `gh-pages` branch root; `vite.config.js` sets
   `base: './'` for project-page paths — don't remove that.
-- Never commit secrets. The verification recipe in docs/VERIFICATION.md
+- Never commit secrets. The verification recipe in `docs/VERIFICATION.md`
   intentionally references credentials only via environment variables.
 
 ## Where the tricky math lives
 
-- Sobel → world-space normal derivation: `src/normalmap.js` +
-  docs/PIPELINE.md.
+- Sobel → world-space normal derivation: `src/infinite/heightfield.js`.
 - Terrain composition (multi-noise channels, monotone-cubic spline response
   curves, contrast expansion, iterated domain warp, anisotropic ridge
-  spines): `src/terrain-compose.js` + docs/TERRAIN_RESEARCH.md (sources) +
-  docs/PIPELINE.md (formulas).
-- Strength scaling equivalence: docs/PIPELINE.md.
-- Terrain RGB encoding/decoding (terrarium tiles): `tools/build-real-terrain.mjs`.
-- Web-mercator metres-per-pixel (why worldSizeX == worldSizeZ):
-  docs/PIPELINE.md.
+  spines): `src/terrain-compose.js` + `docs/TERRAIN_RESEARCH.md`.
+- Per-LOD snapping, padded rings, parent-square clip and morphs:
+  `src/infinite/origins.js`, `src/infinite/clipmap.js`,
+  `src/infinite/shaders.js` + `docs/INFINITE_TERRAIN_CONCEPT.md`.
+- Toroidal cache and texture uploads: `src/infinite/tiles.js`.
+- Floating origin and tile phase: `src/infinite/main.js`,
+  `src/infinite/flight.js`.

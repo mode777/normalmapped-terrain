@@ -22,4 +22,4 @@ git commit -qm "deploy: ${BRANCH} $(date -u +%Y-%m-%dT%H:%MZ)"
 git remote add origin "$REMOTE"
 git push -qf origin gh-pages
 
-echo "Done: https://mode777.github.io/normalmapped-terrain/"
+echo "Done: https://mode777.github.io/normalmapped-terrain/infinite.html"

@@ -1,10 +1,9 @@
 /**
  * Infinite procedural heightfield + per-tile Sobel normal baking.
  *
- * This is the large-world sibling of src/terrain-data.js / src/normalmap.js:
- * the same heightfield -> float gradient -> object-space normal-map pipeline,
- * but evaluated per tile at an arbitrary world coordinate instead of being
- * generated once for a finite square.
+ * The pipeline is heightfield -> float gradient -> object-space normal map,
+ * evaluated per tile at an arbitrary world coordinate. There is no global
+ * terrain pass: every sample is a pure function of its position.
  *
  * The height function is deterministic for a given seed. Every tile is
  * sampled in absolute world metres, so adjacent tiles and adjacent LODs agree
@@ -20,11 +19,11 @@ export const DEFAULT_HEIGHT_SCALE = 1500; // metres of relief for h in [0,1]
  * Creates a seeded, effectively infinite height function.
  *
  * The composition (multi-noise channels + spline response curves + iterated
- * domain warp + anisotropic ridge spines) lives in src/terrain-compose.js
- * and is shared with the finite PoC; see docs/TERRAIN_RESEARCH.md for the
- * recipe and its sources. A pure-function height field is what makes the
- * streaming cache work: no global passes (e.g. erosion simulation) are
- * possible without seams, so the variety comes from composition alone.
+ * domain warp + anisotropic ridge spines) lives in src/terrain-compose.js;
+ * see docs/TERRAIN_RESEARCH.md for the recipe and its sources. A pure-function
+ * height field is what makes the streaming cache work: no global passes
+ * (e.g. erosion simulation) are possible without seams, so the variety comes
+ * from composition alone.
  *
  * Returns normalized heights in [0,1]. Multiply by `heightScale` for metres.
  * The same object can be created in the worker and on the main thread; as
@@ -87,9 +86,9 @@ export function bakeTileNormals(heightsHalo, tileSize, spacing, heightScale) {
       const l = heightsHalo[row + c - 1], r = heightsHalo[row + c + 1];
       const bl = heightsHalo[rowDown + c - 1], b = heightsHalo[rowDown + c], br = heightsHalo[rowDown + c + 1];
 
-      // Sobel X (columns = world x) and Z (rows = world z). Same derivation
-      // as src/normalmap.js: response is divided by 8 * pixelSpacing and
-      // multiplied by heightScale before forming N ∝ (-dh/dx, 1, -dh/dz).
+      // Sobel X (columns = world x) and Z (rows = world z). The response is
+      // divided by 8 * pixelSpacing and multiplied by heightScale before
+      // forming N ∝ (-dh/dx, 1, -dh/dz).
       const gx = (tr + 2 * r + br) - (tl + 2 * l + bl);
       const gz = (bl + 2 * b + br) - (tl + 2 * t + tr);
 
