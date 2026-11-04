@@ -36,6 +36,7 @@ interface AppState {
   materialMode: MaterialMode;
   heightBlend: number;
   materialNormalStrength: number;
+  materialScale: number;
   wireframe: boolean;
   lodDebug: boolean;
   autoCruise: boolean;
@@ -68,6 +69,7 @@ export interface DemQA {
   setMaterialMode(mode: MaterialMode): void;
   setHeightBlend(value: number): void;
   setMaterialNormalStrength(value: number): void;
+  setMaterialScale(value: number): void;
   getMaterialStats(): MaterialStats;
   waitForTiles(): Promise<void>;
   warpTo(x: number, z: number, y?: number | null): Promise<void>;
@@ -89,6 +91,7 @@ const state: AppState = {
   materialMode: 'on',
   heightBlend: 0.25,
   materialNormalStrength: 1,
+  materialScale: 8,
   wireframe: false,
   lodDebug: false,
   autoCruise: true,
@@ -152,6 +155,10 @@ async function boot(): Promise<void> {
       state.materialNormalStrength = value;
       terrainRenderer?.setMaterialNormalStrength(value);
     },
+    onMaterialScale: (value) => {
+      state.materialScale = value;
+      terrainRenderer?.setMaterialScale(value);
+    },
     onWireframe: (on) => { state.wireframe = on; terrainRenderer?.setWireframe(on); },
     onLodDebug: (on) => {
       state.lodDebug = on;
@@ -197,6 +204,7 @@ async function boot(): Promise<void> {
         fadeEnd: 6000,
         heightBlend: state.heightBlend,
         normalScale: state.materialNormalStrength,
+        textureScale: state.materialScale,
         aoStrength: 0.7,
       };
     } catch (error) {
@@ -231,6 +239,7 @@ async function boot(): Promise<void> {
   terrainRenderer.setMaterialMode(state.materialMode);
   terrainRenderer.setHeightBlend(state.heightBlend);
   terrainRenderer.setMaterialNormalStrength(state.materialNormalStrength);
+  terrainRenderer.setMaterialScale(state.materialScale);
   // The DEM view looks across a 30 km chunk; the infinite page's
   // 2.4 / outerExtent fog would wash out the mid-ground.
   terrainRenderer.setFogDensity(1.1 / metrics.outerExtent);
@@ -485,6 +494,14 @@ function setupQA(): void {
       if (input instanceof HTMLInputElement) input.value = String(value);
       const label = document.getElementById('material-normal-strength-val');
       if (label) label.textContent = `${value.toFixed(2)}×`;
+    },
+    setMaterialScale: (value) => {
+      state.materialScale = value;
+      terrainRenderer.setMaterialScale(value);
+      const input = document.getElementById('material-scale');
+      if (input instanceof HTMLInputElement) input.value = String(value);
+      const label = document.getElementById('material-scale-val');
+      if (label) label.textContent = `${value.toFixed(1)}×`;
     },
     getMaterialStats: () => terrainRenderer.getMaterialStats(),
     waitForTiles: () => streamer.waitForDesired(flight.x, flight.z),

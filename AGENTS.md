@@ -228,8 +228,9 @@ the binary is at `~/.local/bin/openspec`.
     `uv = vWorldPos.xz / uStackExtent + 0.5 + renderOrigin.xz / uStackExtent`;
     it must not use the phase-wrapped `uRenderOrigin` (that is for the tiled
     height/normal atlases). The stack is clamped, not repeated. Material UVs
-    use `mod(renderOrigin, tileMeters)` per material to stay small and
-    world-locked.
+    use `mod(renderOrigin, tileMeters * uMaterialScale)` and divide by the
+    same scaled tile (default 8×); do not modulo the unscaled physical size or
+    the pattern jumps on rebase.
 22. **Material normals are RG slopes, not RGB normals.** Decode
     `s = (rg * 2 - 1) * slopeScale`; Poly Haven's `nor_dx` is converted to the
     repo's V = +z frame at pack time. Compose as a slope sum with the base

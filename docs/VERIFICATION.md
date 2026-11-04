@@ -186,7 +186,9 @@ baked four-slot material stack. The material QA names:
 The material distribution is a fixed four-material palette for this first
 slice: `rock_face_03`, `gravelly_sand`, `snow_02`, `sparse_grass`. The stack
 is 2048² over the 30.72 km window; the macro albedo is 1024². Material textures
-are 512² arrays with mips/anisotropy. The material-off path preserves the old
+are 512² arrays with mips/anisotropy. The panel's **Texture scale** slider
+multiplies the material world tile (default 8×; range 1–32×); the world-lock
+offset uses the same scaled tile. The material-off path preserves the old
 height/slope palette; the infinite page does not load materials in this change.
 
 `puppeteer` runs at roughly 1 fps on SwiftShader with the material shader; the

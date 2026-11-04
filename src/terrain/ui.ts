@@ -18,6 +18,7 @@ export interface UICallbacks {
   onMaterialMode?(mode: MaterialMode): void;
   onHeightBlend?(value: number): void;
   onMaterialNormalStrength?(value: number): void;
+  onMaterialScale?(value: number): void;
 }
 
 export interface UIStats {
@@ -81,6 +82,8 @@ interface UIElements {
   heightBlendVal: HTMLSpanElement | null;
   materialNormalStrength: HTMLInputElement | null;
   materialNormalStrengthVal: HTMLSpanElement | null;
+  materialScale: HTMLInputElement | null;
+  materialScaleVal: HTMLSpanElement | null;
   wireframe: HTMLInputElement;
   lodDebug: HTMLInputElement;
   tileDebug: HTMLInputElement;
@@ -124,6 +127,8 @@ export function initUI(cb: UICallbacks): UIApi {
     heightBlendVal: optionalById<HTMLSpanElement>('height-blend-val'),
     materialNormalStrength: optionalById<HTMLInputElement>('material-normal-strength'),
     materialNormalStrengthVal: optionalById<HTMLSpanElement>('material-normal-strength-val'),
+    materialScale: optionalById<HTMLInputElement>('material-scale'),
+    materialScaleVal: optionalById<HTMLSpanElement>('material-scale-val'),
     wireframe: byId<HTMLInputElement>('wireframe'),
     lodDebug: byId<HTMLInputElement>('lod-debug'),
     tileDebug: byId<HTMLInputElement>('tile-debug'),
@@ -173,6 +178,12 @@ export function initUI(cb: UICallbacks): UIApi {
       el.materialNormalStrengthVal.textContent = `${value.toFixed(2)}×`;
     }
     cb.onMaterialNormalStrength?.(value);
+  });
+
+  el.materialScale?.addEventListener('input', () => {
+    const value = +el.materialScale!.value;
+    if (el.materialScaleVal) el.materialScaleVal.textContent = `${value.toFixed(1)}×`;
+    cb.onMaterialScale?.(value);
   });
 
   el.cruiseSpeed.addEventListener('input', () => {

@@ -18,8 +18,10 @@ changes.
 - **Layers:** two `DataArrayTexture`s, one layer per material, with mips and
   anisotropy. Albedo is sampled as sRGB; slope/rough/ao is linear.
 - **Physical scale:** `tileMeters` is Poly Haven's `dimensions / 1000`. The
-  shader uses it as the default world UV scale, so the normal slope keeps its
-  photographed physical size.
+  renderer applies a global `textureScale` multiplier to it (default **8×**,
+  panel slider 1–32×), so the packed textures read at a larger world scale
+  without re-packing. The shader divides by `tileMeters * textureScale`; the
+  world-lock offset uses the same scaled tile.
 - **Slope encoding:** the shader decodes `s = (rg * 2 - 1) * slopeScale`; the
   per-material `slopeScale` prevents clipping steep gradients. Poly Haven's
   `nor_dx` (green-down) is converted to the repo's V = +z frame during packing.

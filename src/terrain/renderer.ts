@@ -60,6 +60,7 @@ type TerrainUniforms = {
   uMaterialParamsB: THREE.IUniform<THREE.Vector4[]>;
   uMaterialUvOffset: THREE.IUniform<THREE.Vector2[]>;
   uMaterialNormalScale: THREE.IUniform<number>;
+  uMaterialScale: THREE.IUniform<number>;
   uMaterialHeightBlend: THREE.IUniform<number>;
   uMaterialFadeStart: THREE.IUniform<number>;
   uMaterialFadeEnd: THREE.IUniform<number>;
@@ -119,6 +120,8 @@ export interface MaterialRenderOptions {
   heightBlend?: number;
   /** Global multiplier on material normal slope. */
   normalScale?: number;
+  /** Global multiplier on material world tile size (default 8×). */
+  textureScale?: number;
   /** How strongly the packed AO darkens albedo, 0..1. */
   aoStrength?: number;
 }
@@ -137,6 +140,7 @@ export interface MaterialStats {
   fadeEnd: number;
   heightBlend: number;
   normalScale: number;
+  textureScale: number;
 }
 
 export interface ClipmapRendererOptions {
@@ -227,6 +231,7 @@ export class ClipmapRenderer {
     const materialFadeEnd = Math.max(materialFadeStart + 1, materials?.fadeEnd ?? 1);
     const materialHeightBlend = Math.max(0, Math.min(1, materials?.heightBlend ?? 0.25));
     const materialNormalScale = Math.max(0, Math.min(2, materials?.normalScale ?? 1));
+    const materialTextureScale = Math.max(0.5, Math.min(32, materials?.textureScale ?? 8));
     const materialAoStrength = Math.max(0, Math.min(1, materials?.aoStrength ?? 0.7));
     const entries = this.materialLibrary?.entries ?? [];
     this.materialParamsA = Array.from({ length: 24 }, (_, i) => {
@@ -279,6 +284,7 @@ export class ClipmapRenderer {
       uMaterialParamsB: { value: this.materialParamsB },
       uMaterialUvOffset: { value: this.materialUvOffset },
       uMaterialNormalScale: { value: materialNormalScale },
+      uMaterialScale: { value: materialTextureScale },
       uMaterialHeightBlend: { value: materialHeightBlend },
       uMaterialFadeStart: { value: materialFadeStart },
       uMaterialFadeEnd: { value: materialFadeEnd },
@@ -563,11 +569,13 @@ export class ClipmapRenderer {
       this.terrainUniforms.uStackUvOffset.value.set(offset.x, offset.y);
     }
     if (this.materialLibrary) {
+      const materialScale = this.terrainUniforms.uMaterialScale.value;
       for (let i = 0; i < this.materialLibrary.count; i++) {
         const entry = this.materialLibrary.entries[i];
+        const tile = entry.tileMeters * materialScale;
         this.materialUvOffset[i]?.set(
-          wrapPhase(renderOrigin.x, entry.tileMeters),
-          wrapPhase(renderOrigin.y, entry.tileMeters),
+          wrapPhase(renderOrigin.x, tile),
+          wrapPhase(renderOrigin.y, tile),
         );
       }
     }
@@ -648,6 +656,10 @@ export class ClipmapRenderer {
     this.terrainUniforms.uMaterialNormalScale.value = Math.max(0, Math.min(2, value));
   }
 
+  setMaterialScale(value: number): void {
+    this.terrainUniforms.uMaterialScale.value = Math.max(0.5, Math.min(32, value));
+  }
+
   getMaterialStats(): MaterialStats {
     const library = this.materialLibrary;
     const stack = this.materialStack;
@@ -675,6 +687,7 @@ export class ClipmapRenderer {
       fadeEnd: this.terrainUniforms.uMaterialFadeEnd.value,
       heightBlend: this.terrainUniforms.uMaterialHeightBlend.value,
       normalScale: this.terrainUniforms.uMaterialNormalScale.value,
+      textureScale: this.terrainUniforms.uMaterialScale.value,
     };
   }
 

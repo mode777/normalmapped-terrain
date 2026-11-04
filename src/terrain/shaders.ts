@@ -164,6 +164,7 @@ export const terrainFragmentShader: string = /* glsl */ `
   uniform vec4 uMaterialParamsB[24];
   uniform vec2 uMaterialUvOffset[24];
   uniform float uMaterialNormalScale;
+  uniform float uMaterialScale;
   uniform float uMaterialHeightBlend;
   uniform float uMaterialFadeStart;
   uniform float uMaterialFadeEnd;
@@ -333,7 +334,7 @@ export const terrainFragmentShader: string = /* glsl */ `
           int id = int(clamp(slotId(stackIds, s) * 255.0 + 0.5, 0.0, 23.0));
           vec4 pa = uMaterialParamsA[id];
           vec4 pb = uMaterialParamsB[id];
-          float tile = max(pa.x, 0.01);
+          float tile = max(pa.x * uMaterialScale, 0.01);
           vec3 a;
           float h;
           float ao;
