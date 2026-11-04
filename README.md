@@ -6,12 +6,14 @@ the lighting normals come from per-pixel normal maps baked from the same float
 heightfield. The same renderer works for both a procedural world and a
 checked-in real DEM.
 
-Two pages share one texture-backed clipmap renderer:
+Two terrain pages share one texture-backed clipmap renderer; a third page shows
+the packed material library:
 
 | Page | Dataset | What it proves |
 |---|---|---|
 | [`infinite.html`](https://mode777.github.io/normalmapped-terrain/infinite.html) | Seeded procedural height function, streamed by workers | An effectively infinite world from a small mesh |
-| [`dem.html`](https://mode777.github.io/normalmapped-terrain/dem.html) | Kartverket DTM 10, Jotunheimen, checked in as height/normal tiles | The same renderer consumes offline-baked real terrain |
+| [`dem.html`](https://mode777.github.io/normalmapped-terrain/dem.html) | Kartverket DTM 10, Jotunheimen, checked in as height/normal tiles | The same renderer consumes offline-baked real terrain with textured materials |
+| [`materials.html`](https://mode777.github.io/normalmapped-terrain/materials.html) | Poly Haven CC0 library, packed offline | Asset-level albedo/slope QA for the 20-material set |
 
 [![Infinite terrain, clipmap rings and normal-mapped detail](docs/screenshots/infinite-default.png)](https://mode777.github.io/normalmapped-terrain/infinite.html)
 
@@ -79,6 +81,31 @@ baked offline by `tools/bake-dem.ts`, checked into
 - **Attribution:** © Kartverket, Nasjonal høydemodell DTM 10, CC BY 4.0,
   modified (resampled, tiled, normals derived). See
   [docs/DEM_DATASET.md](docs/DEM_DATASET.md).
+- **Material textures:** [Poly Haven](https://polyhaven.com/) CC0 assets,
+  packed and resampled. See [public/materials/README.md](public/materials/README.md).
+
+## Textured material layer
+
+The DEM page replaces the flat height/slope color bands with a checked-in
+Poly Haven library and a baked four-slot distribution:
+
+- **20 materials** (24 cap), packed as 512² RGBA8 albedo+height and
+  slope+roughness+AO arrays. Physical tile sizes come from Poly Haven's
+  recorded dimensions.
+- **Baked stack** — a 2048² map of four material IDs and four normalized
+  weights over the 30.72 km window, plus a 1024² macro albedo for the far
+  field. The weight rules are steepness-driven rock/cliff, scree on moderate
+  slopes, snow on high north-facing ground and grass in low concavities.
+- **Shading** — height-blended albedo, material normals composed as a slope sum
+  (no TBN), triplanar projection for rock only, and distance fade to the macro
+  albedo. The material-off path preserves the old palette.
+- **First-slice palette** — Jotunheimen uses `rock_face_03`, `gravelly_sand`,
+  `snow_02` and `sparse_grass`; the other 16 materials are for the synthetic
+  biome world in the follow-up change.
+
+[materials.html](https://mode777.github.io/normalmapped-terrain/materials.html)
+shows every packed albedo/slope pair. `dem.html` exposes material
+on/off/debug, height-blend and material-normal controls.
 
 ## Infinite page controls
 
@@ -93,12 +120,16 @@ instead of the unbounded wander.
 | `Shift` | boost |
 | Mouse wheel | change flight speed |
 | Panel | auto-cruise, speed, reset, sun, normal strength, wireframe, LOD/tile debug |
+| Panel → Materials → Mode | material on / off / debug weight view |
+| Height blend | bias material boundaries by the packed height |
+| Material normals | scale the material slope contribution |
 
 ## Verification
 
 ```bash
 npm run test:infinite               # Node-only tile/LOD/normal math checks
 npm run test:dem                    # synthetic + checked-in DEM dataset checks
+npm run test:materials              # packed Poly Haven library checks
 npm run build && npx vite preview   # serve dist/ on :4173
 
 npm install --no-save puppeteer-core
@@ -115,15 +146,16 @@ The infinite headless QA verifies 160 resident tiles after streaming settles,
 no console/page errors, warps to 25 km and 500 km, a magenta-background crack
 test, and measures the normal-map contribution against flat normals with an
 8× normal-to-mesh resolution ratio. The DEM loop verifies the 3,080-tile
-dataset, an orbit/warp, LOD/tile debug, a boundary view, and the same crack
-test. `test:dem` is the network-free data gate. See
-[docs/VERIFICATION.md](docs/VERIFICATION.md) for the full recipe and reference
-values.
+dataset, an orbit/warp, LOD/tile debug, a boundary view, the crack test, and the
+material set: on/off, boundary, cliff, distance, debug/weight view and the
+swatch page. `test:dem` and `test:materials` are the network-free data gates.
+See [docs/VERIFICATION.md](docs/VERIFICATION.md) for the full recipe and
+reference values.
 
-Default CI runs `npm run test:infinite`, `npm run test:dem` and `npm run build`.
-The screenshot comparison loops are intentionally **not** part of the Actions
-deployment; use the SSH verification host when debugging a visual regression
-or comparing screenshots.
+Default CI runs `npm run test:infinite`, `npm run test:dem`,
+`npm run test:materials` and `npm run build`. The screenshot comparison loops
+are intentionally **not** part of the Actions deployment; use the SSH
+verification host when debugging a visual regression or comparing screenshots.
 
 ## Honest limitations
 
@@ -140,8 +172,17 @@ or comparing screenshots.
   why the spacing was reduced instead of growing it.
 - The DEM scene is a finite 30.72 km window of 10 m data. Its 2× normal map is
   interpolated from the same 10 m heights, so it smooths shading but does not
-  invent survey detail. The checked-in dataset is ~101 MB; the 2× normal PNGs
+  invent survey detail. The checked-in dataset is ~107.5 MB; the 2× normal PNGs
   are the dominant cost.
+- The packed Poly Haven library is ~34 MB (20 × two 512² PNGs). The material
+  stack/macro adds ~6 MB to the DEM dataset.
+- The material shader runs at roughly 1 fps on SwiftShader. That is a software
+  rasterizer, not a real-GPU frame time; the real-GPU filtering/performance
+  pass is still outstanding.
+- Jotunheimen uses a fixed four-material palette. The other 16 library materials
+  are for the synthetic biome world; the infinite page does not load materials
+  in this change. The stack is a whole-window 2048² map (~15 m/texel), not
+  per-LOD material tiles.
 
 ## Documentation
 
@@ -151,6 +192,7 @@ or comparing screenshots.
 | [openspec/](openspec/) | OpenSpec specs, active change proposals and archive |
 | [docs/INFINITE_TERRAIN_CONCEPT.md](docs/INFINITE_TERRAIN_CONCEPT.md) | Per-LOD snapping, padded rings with parent-square trim and morphs, toroidal tile cache, floating origin, decisions and measured results |
 | [docs/DEM_DATASET.md](docs/DEM_DATASET.md) | Jotunheimen source, license, bake config, tile format, validation and regeneration |
+| [docs/MATERIALS.md](docs/MATERIALS.md) | Poly Haven library, packed formats, material stack, bake rules, measurements and limitations |
 | [docs/TERRAIN_RESEARCH.md](docs/TERRAIN_RESEARCH.md) | Why plain fBM is bland and the composition this repo adopted: multi-noise channels, spline curves, domain warp, ridge spines |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | Repeatable headless QA, acceptance metrics, manual test pass |
 
@@ -163,6 +205,8 @@ npm run typecheck       # strict TypeScript check, no emit
 npm run build           # typecheck + static site in dist/
 npm run test:infinite   # Node-only tile/LOD/normal math checks
 npm run test:dem        # synthetic + checked-in DEM dataset checks
+npm run test:materials  # packed Poly Haven library checks
+npm run bake:materials  # fetch/pack the Poly Haven library
 npm run bake:dem -- --config tools/dem/jotunheimen.json  # re-bake the DEM
 ```
 
@@ -181,6 +225,7 @@ Live at:
 
 - **https://mode777.github.io/normalmapped-terrain/infinite.html**
 - **https://mode777.github.io/normalmapped-terrain/dem.html**
+- **https://mode777.github.io/normalmapped-terrain/materials.html**
 
 ## Repo map
 
@@ -190,17 +235,22 @@ AGENTS.md            orientation for AI coding agents (repo map + invariants)
 openspec/            OpenSpec specs, active changes and archive
 infinite.html        procedural infinite page
 dem.html             pre-baked Jotunheimen DEM page
+materials.html       packed material swatch page
 docs/INFINITE_TERRAIN_CONCEPT.md  clipmap/tile-cache concept + results
 docs/DEM_DATASET.md               Jotunheimen source, bake and validation
+docs/MATERIALS.md                 material library, stack, bake and measurements
 docs/TERRAIN_RESEARCH.md          terrain-composition research + sources
 docs/VERIFICATION.md              headless QA recipe + acceptance metrics
-public/data/jotunheimen/          checked-in DEM manifest, tiles, coarse grid
+public/data/jotunheimen/          checked-in DEM manifest, tiles, coarse grid,
+                                  material stack and macro albedo
+public/materials/                 packed Poly Haven material library
 src/perlin.ts        seeded improved Perlin + fBM + ridged multifractal
 src/terrain-compose.ts  multi-noise/spline/warp terrain composition
 src/sky-shaders.ts   sky gradient + sun disc/halo shaders
 src/styles.css       shared UI chrome
 src/terrain/         shared renderer, tile cache/source contract, clipmap,
-                     shaders, origins, normals and UI
+                     shaders, origins, normals, materials and UI
+src/materials/       material swatch page
 src/infinite/        procedural source/worker, flight, page orchestration
 src/dem/             pre-baked source and DEM page orchestration
 tools/               bake/validation tools + headless QA drivers

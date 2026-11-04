@@ -74,7 +74,14 @@ Source metadata:
   "tileSize": 64,
   "outputDir": "public/data/jotunheimen",
   "license": "CC BY 4.0",
-  "attribution": "© Kartverket, Nasjonal høydemodell DTM 10, CC BY 4.0, modified (resampled, tiled, normals derived)."
+  "attribution": "© Kartverket, Nasjonal høydemodell DTM 10, CC BY 4.0, modified (resampled, tiled, normals derived).",
+  "materials": {
+    "library": "public/materials/manifest.json",
+    "slots": ["rock_face_03", "gravelly_sand", "snow_02", "sparse_grass"],
+    "stackSize": 2048,
+    "macroSize": 1024,
+    "seed": 20260217
+  }
 }
 ```
 
@@ -92,11 +99,18 @@ npm install
 # Bake the full dataset into public/data/jotunheimen
 npm run bake:dem -- --config tools/dem/jotunheimen.json
 
+# Rebake only the material stack/macro from the checked-in L0 height tiles
+node tools/bake-dem.ts --config tools/dem/jotunheimen.json --materials-only
+
 # Validate the checked-in dataset without network access
 npm run test:dem
+npm run test:materials
 
 # Validate only, without rebuilding
 node tools/bake-dem.ts --check --config tools/dem/jotunheimen.json
+
+# Rebake the material stack into a temp dir and compare hashes
+node tools/bake-dem.ts --config tools/dem/jotunheimen.json --check-materials
 ```
 
 The bake tool can also read a local GeoTIFF for reproducible experiments:
@@ -135,6 +149,9 @@ public/data/jotunheimen/
   coarse-height.bin          # 1024^2 uint16 normalized heights
   seam-report.json
   preview.png
+  stack-ids.png              # 2048^2 RGBA8: 4 material IDs per texel
+  stack-weights.png          # 2048^2 RGBA8: 4 normalized weights per texel
+  macro-albedo.png           # 1024^2 RGBA8: low-frequency far-field albedo
   h/<level>/<tx>_<ty>.bin     # 64^2 uint16 little-endian, normalized
   n/<level>/<tx>_<ty>.png     # 128^2 RGBA8 object-space normals
 ```
@@ -155,6 +172,42 @@ B = N.y (up)
 No TBN matrix is used. Heights are stored normalized, then converted to
 `Float32Array` at runtime and uploaded as `R16F`.
 
+## Material stack
+
+The material stack is a whole-window 2048² pair (~15 m/texel) plus a 1024²
+macro map (~30 m/texel). It is not part of the per-LOD height/normal atlas; the
+shader samples it in world space and clamps at the edges.
+
+```
+stack-ids.png      2048^2 RGBA8   four material library indices per texel
+stack-weights.png  2048^2 RGBA8   four normalized weights (sum 255)
+macro-albedo.png   1024^2 RGBA8   weighted palette average + low-frequency noise
+```
+
+The first slice uses a fixed four-material palette, in slot order:
+`rock_face_03`, `gravelly_sand`, `snow_02`, `sparse_grass`. The IDs are the
+library indices of those entries; they are constant across the window, so the
+weights cross-fade without an ID-set change.
+
+Weights come from the 10 m L0 grid:
+
+- **Snow:** high normalized height, reduced on steep slopes, boosted on
+  north-facing slopes (`-N.z`).
+- **Scree:** moderate/steep slopes below the snow line, broken up by band
+  noise.
+- **Grass:** low, gentle, concave ground.
+- **Rock:** the implicit remainder, so steep cliffs are rock-dominant.
+
+The bake also uses convexity/concavity (the Laplacian of the height grid) and
+seeded low-frequency value noise. The macro map is the same blend sampled at
+30 m and multiplied by a large-scale noise term; the renderer blends to it
+beyond the material texture fade.
+
+Row 0 is north and `+z` is south, matching the height tiles and the renderer's
+`flipY = false` convention. The stack extent equals the local frame size
+(30,720 m). The manifest records the library path, slot IDs, stack/macro
+paths, dimensions, extent, encoding, seed and SHA-256 hashes.
+
 ## Validation
 
 `npm run test:dem` runs synthetic grid/tile/normal checks and then validates
@@ -167,14 +220,24 @@ the checked-in dataset:
 5. the seam report's maximum boundary error is within its threshold;
 6. the coarse height grid has the right size;
 7. a deterministic sample of normal tiles is rebaked from the reconstructed
-   L0 grid and compared with the checked-in PNGs.
+   L0 grid and compared with the checked-in PNGs;
+8. the material stack and macro PNGs exist with the declared dimensions;
+9. every material ID is inside the library and the four slots match the
+   manifest slot order;
+10. every stack texel's four weights sum to 255 and every slot has a
+    non-degenerate range;
+11. the stack/macro SHA-256 hashes match the manifest.
 
 Reference values for the checked-in 2× dataset: 3,080 tiles, 128×128 normal
-tiles, max seam error 1, 18 normal tiles rebaked during validation, ~101 MB
-including heights, normals, coarse grid and preview.
+tiles, max seam error 1, 18 normal tiles rebaked during validation, a 2048²
+material stack and 1024² macro, stack weight means
+`0.844 / 0.018 / 0.014 / 0.123` (rock/scree/snow/grass), and ~107.5 MB
+including heights, normals, coarse grid, preview, stack and macro. The packed
+material library is a separate ~33.5 MB under `public/materials/`.
 
 `node tools/bake-dem.ts --check` runs the same validation without the
-synthetic checks.
+synthetic checks. `--check-materials` rebakes the stack/macro into a temporary
+directory and compares hashes, which catches a stale dataset or changed seed.
 
 The visual check is separate and manual. See
 [VERIFICATION.md](VERIFICATION.md#pre-baked-dem-page).
@@ -183,12 +246,20 @@ The visual check is separate and manual. See
 
 1. Delete `.cache/dem/jotunheimen/` if you want a fresh source snapshot.
 2. Run `npm run bake:dem -- --config tools/dem/jotunheimen.json`.
-3. Run `npm run test:dem`.
+3. Run `npm run test:dem` and `npm run test:materials`.
 4. Inspect `public/data/jotunheimen/preview.png` for elevation coverage and
    obvious voids. It is a 1024² hillshade (~30 m per preview pixel).
-5. Run the DEM screenshot loop against the built site.
-6. Commit the updated manifest, tiles, coarse grid, seam report and preview as
-   one change.
+5. Inspect `macro-albedo.png` for the material distribution and `stack-weights.png`
+   for the four-slot blend.
+6. Run the DEM screenshot loop against the built site.
+7. Commit the updated manifest, tiles, coarse grid, seam report, preview,
+   material stack/macro and material library as one change.
+
+If only the material palette or weights change, use
+`node tools/bake-dem.ts --config tools/dem/jotunheimen.json --materials-only`
+instead of a full source re-bake, then run
+`node tools/bake-dem.ts --config tools/dem/jotunheimen.json --check-materials`.
 
 The bake does not write a wall-clock timestamp, so re-running against the same
-source snapshot produces the same tile contents and manifest values.
+source snapshot produces the same tile contents, stack/macro hashes and
+manifest values.

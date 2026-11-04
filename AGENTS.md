@@ -22,13 +22,17 @@ Ship anything visual only after verifying it renders — see
 
 ```bash
 npm install
-npm run dev                     # vite dev server; open /infinite.html or /dem.html
+npm run dev                     # vite dev server; open /infinite.html, /dem.html or /materials.html
 npm run typecheck               # strict tsc for app + Node tools/config
 npm run build                   # typecheck + production build -> dist/
 
 npm run test:infinite           # Node-only math checks; one script, no per-test filter
 npm run test:dem                # synthetic + checked-in DEM dataset checks
+npm run test:materials          # packed Poly Haven library checks
+npm run bake:materials          # fetch/pack the Poly Haven library
 npm run bake:dem -- --config tools/dem/jotunheimen.json  # re-bake checked-in DEM
+node tools/bake-dem.ts --config tools/dem/jotunheimen.json --materials-only
+node tools/bake-dem.ts --config tools/dem/jotunheimen.json --check-materials
 npm run preview                 # serve dist/ on :4173 (build first)
 
 # headless QA (optional; see docs/VERIFICATION.md)
@@ -85,24 +89,34 @@ the binary is at `~/.local/bin/openspec`.
 | `src/terrain/tile-cache.ts` | Toroidal per-LOD tile cache, async source queue, uploads |
 | `src/terrain/clipmap.ts` | Centre block, padded ring grids, parent-square trim, skirts |
 | `src/terrain/origins.ts` | Per-LOD clipmap origins: each level snaps to its own spacing |
-| `src/terrain/shaders.ts` | Clipmap vertex/fragment shaders + LOD/tile debug views |
-| `src/terrain/renderer.ts` | Shared texture-backed `ClipmapRenderer` |
+| `src/terrain/shaders.ts` | Clipmap vertex/fragment shaders + material composition + LOD/tile debug views |
+| `src/terrain/renderer.ts` | Shared texture-backed `ClipmapRenderer` with optional material library/stack |
+| `src/terrain/materials.ts` | Packed material library loader and manifest validation |
+| `src/terrain/material-stack.ts` | Whole-window material stack/macro loader and UV offset |
 | `src/terrain/ui.ts` | DOM control wiring; `initUI(callbacks)` returns a setter API |
+| `src/materials/main.ts` | Material swatch page logic (albedo + packed slope shading) |
+| `src/materials/materials.css` | Swatch page layout |
 | `src/dem/prebaked-source.ts` | Manifest/tile `TileSource`, coarse `heightAt`, edge clamp |
-| `src/dem/main.ts` | DEM page: manifest-driven config, free-fly/orbit, UI, stats |
+| `src/dem/main.ts` | DEM page: manifest-driven config, materials, free-fly/orbit, UI, stats |
 | `src/dem/dem.css` | DEM page additions to `src/styles.css` |
 | `infinite.html` | The procedural PoC entry page |
 | `dem.html` | The pre-baked Jotunheimen DEM entry page |
-| `public/data/jotunheimen/` | Checked-in manifest, height/normal tiles, coarse grid, preview |
+| `materials.html` | Packed Poly Haven material swatch page |
+| `public/data/jotunheimen/` | Checked-in manifest, height/normal tiles, coarse grid, stack/macro, preview |
+| `public/materials/` | Packed material library: two 512² PNGs per material + manifest |
 | `tools/test-infinite.ts` | Node-only tile/LOD/normal math checks |
-| `tools/bake-dem.ts` | Offline Kartverket WCS -> checked-in tile baker |
+| `tools/fetch-materials.ts` | Poly Haven API fetch/pack tool; writes `public/materials` |
+| `tools/test-materials.ts` | Packed library validation (cap, dimensions, hashes) |
+| `tools/materials/polyhaven.json` | Curated 20-material source list |
+| `tools/bake-dem.ts` | Offline Kartverket WCS -> checked-in tile/stack baker |
 | `tools/test-dem.ts` | Synthetic + checked-in DEM dataset validation |
-| `tools/dem/` | Bake source, grid/tile/normal helpers, manifest validator |
+| `tools/dem/` | Bake source, grid/tile/normal helpers, material stack bake, manifest validator |
+| `docs/MATERIALS.md` | Material library, stack, bake rules, measurements and limitations |
 | `tools/screenshot-infinite.ts` | Headless QA driver for `infinite.html` |
 | `tools/analyze-infinite.ts` | Pixel/console assertions for the infinite screenshots |
-| `tools/screenshot-dem.ts` | Headless QA driver for `dem.html` |
+| `tools/screenshot-dem.ts` | Headless QA driver for `dem.html` (includes material shots/swatches) |
 | `tools/analyze-dem.ts` | Pixel/console assertions for the DEM screenshots |
-| `docs/` | INFINITE_TERRAIN_CONCEPT.md, DEM_DATASET.md, TERRAIN_RESEARCH.md, VERIFICATION.md |
+| `docs/` | INFINITE_TERRAIN_CONCEPT.md, DEM_DATASET.md, MATERIALS.md, TERRAIN_RESEARCH.md, VERIFICATION.md |
 
 ## Critical invariants — breaking these silently ruins the render
 
@@ -196,6 +210,43 @@ the binary is at `~/.local/bin/openspec`.
     `vLevel > 0`. Do not add GPU mipmaps to the tiled normal atlas: mips bleed
     across packed slots and would need a full-layer regenerate after every
     `texSubImage3D`.
+19. **Material library is capped at 24 layers and packed as two 512²
+    arrays.** Albedo RGB is sRGB, its alpha is the linear height, and the
+    slope/rough/ao array is entirely linear. Arrays generate per-layer mips;
+    do not move material textures into the normal atlas, which has no mips and
+    is already at the 2048² ceiling. `public/materials/manifest.json` is the
+    source of truth for layer order, tile metres, slope scale and packing.
+20. **The material stack is a whole-window 2048² pair plus a 1024² macro.** It
+    stores four material IDs (library indices) and four weights per texel;
+    weights sum to 255. The Jotunheimen slots are fixed in the order
+    `rock_face_03, gravelly_sand, snow_02, sparse_grass` (library indices
+    `2,6,0,9`). Row 0 is north, `+z` is south, and the PNGs load with
+    `flipY=false`. IDs are nearest-sampled; weights are linear/mipmapped. Do
+    not reorder slots without re-baking the stack and manifest.
+21. **The material stack is world-locked with the absolute render origin.**
+    The shader uses
+    `uv = vWorldPos.xz / uStackExtent + 0.5 + renderOrigin.xz / uStackExtent`;
+    it must not use the phase-wrapped `uRenderOrigin` (that is for the tiled
+    height/normal atlases). The stack is clamped, not repeated. Material UVs
+    use `mod(renderOrigin, tileMeters)` per material to stay small and
+    world-locked.
+22. **Material normals are RG slopes, not RGB normals.** Decode
+    `s = (rg * 2 - 1) * slopeScale`; Poly Haven's `nor_dx` is converted to the
+    repo's V = +z frame at pack time. Compose as a slope sum with the base
+    slope (no TBN, no per-vertex tangents). Rock is triplanar; other materials
+    are planar. Material masks use the base normal, so changing material or
+    detail strength must not move the baked distribution.
+23. **Material height blend and far-field macro.** The shader biases stack
+    weights by the packed height, then renormalizes; it blends to the macro
+    albedo beyond the material fade. `uMaterialMode == 0` or no library/stack
+    must reproduce the old height/slope palette exactly. The infinite page
+    does not load materials in this change.
+24. **Material data is generated, not hand-edited.** Change the library with
+    `npm run bake:materials` / `npm run test:materials`; change the stack with
+    `node tools/bake-dem.ts --config tools/dem/jotunheimen.json
+    --materials-only`, then `--check-materials` and `npm run test:dem`. Source
+    downloads stay in the gitignored `.cache/materials/`; `sharp` is a
+    devDependency only.
 
 ## Conventions & practices
 
@@ -210,9 +261,10 @@ the binary is at `~/.local/bin/openspec`.
   `tools/screenshot-infinite.ts` and `tools/screenshot-dem.ts` are excluded
   because `puppeteer-core` is an optional install.
 - Runtime dependencies: `three` only. `typescript`, `@types/three`,
-  `@types/node`, `vite`, `pngjs`, `geotiff` and `proj4` are devDependencies.
-  `pngjs` is used by the analyzers and the bake tool; `geotiff`/`proj4` are
-  only used by the offline DEM bake. `puppeteer-core` stays an optional
+  `@types/node`, `vite`, `pngjs`, `geotiff`, `proj4` and `sharp` are
+  devDependencies. `pngjs` is used by the analyzers and the bake tool;
+  `geotiff`/`proj4` are only used by the offline DEM bake; `sharp` is only used
+  by the offline Poly Haven fetch/pack tool. `puppeteer-core` stays an optional
   `npm install --no-save` for the screenshot drivers. Keep it that way unless
   there's a strong reason.
 - Node ≥24 runs the `.ts` QA tools directly via native type stripping. Vite
@@ -222,8 +274,10 @@ the binary is at `~/.local/bin/openspec`.
   `terrain-compose.ts` — ~36, the infinite-page `S0`/`LEVELS`/`normalScale`,
   and the DEM dataset's 10 m / 6 LOD / 2× normal configuration) were chosen to
   keep tile streaming hitch-free. Adding channels costs every tile bake;
-  profile before loosening them. The checked-in DEM dataset is ~101 MB; the
-  2× normal PNGs dominate.
+  profile before loosening them. The checked-in DEM dataset is ~107.5 MB; the
+  2× normal PNGs dominate. The packed Poly Haven library is a separate
+  ~33.5 MB; the material shader is heavy on SwiftShader (~1 fps) and needs a
+  real-GPU pass.
 - Procedural tile generation **must stay in workers**; generating 64² height /
   512² normal tiles on the main thread causes visible hitches at tile
   crossings. The procedural source uses up to 2 workers because the 8× normal
@@ -233,9 +287,11 @@ the binary is at `~/.local/bin/openspec`.
   ~160 MiB, the DEM one is much smaller (640² per layer, 5×5 slots).
 - The height function must stay a pure function of `(x, z)`; global passes
   (e.g. erosion simulation) would make streamed tiles disagree at their seams.
-- The checked-in DEM tiles are generated artifacts; change them by re-running
-  `npm run bake:dem -- --config tools/dem/jotunheimen.json`, not by hand.
-  `npm run test:dem` is the dataset gate; source GeoTIFFs stay out of git.
+- The checked-in DEM tiles and material stack are generated artifacts; change
+  them by re-running `npm run bake:dem -- --config tools/dem/jotunheimen.json`,
+  or `--materials-only` for a stack-only refresh, not by hand. `npm run
+  test:dem` is the dataset gate; `npm run test:materials` is the packed-library
+  gate. Source GeoTIFFs and Poly Haven source downloads stay out of git.
 - Commits: concise imperative subject lines, e.g. `Fix Sobel z-gradient sign`.
 - Deploy = push to `main`. **Push after every successful apply**; the push
   itself runs the deploy workflow (unit/dataset checks, build, Pages publish),
@@ -244,12 +300,12 @@ the binary is at `~/.local/bin/openspec`.
   configured with source **GitHub Actions**, not a `gh-pages` branch.
   `vite.config.ts` sets `base: './'` for project-page paths — don't remove
   that.
-- Default CI runs `npm run test:infinite`, `npm run test:dem` and
-  `npm run build`; the build script includes `tsc --noEmit`. The headless
-  screenshot loops are manual visual-debugging tools; set `--chrome` or
-  `CHROME_SHELL_PATH` (the built-in default is from the original dev box) and
-  use the SSH verification host in `docs/VERIFICATION.md` when screenshots
-  need to be compared.
+- Default CI runs `npm run test:infinite`, `npm run test:dem`,
+  `npm run test:materials` and `npm run build`; the build script includes
+  `tsc --noEmit`. The headless screenshot loops are manual visual-debugging
+  tools; set `--chrome` or `CHROME_SHELL_PATH` (the built-in default is from
+  the original dev box) and use the SSH verification host in
+  `docs/VERIFICATION.md` when screenshots need to be compared.
 - Never commit secrets. The verification recipe in `docs/VERIFICATION.md`
   intentionally references credentials only via environment variables.
 
@@ -265,5 +321,10 @@ the binary is at `~/.local/bin/openspec`.
   `src/terrain/origins.ts`, `src/terrain/clipmap.ts`,
   `src/terrain/shaders.ts` + `docs/INFINITE_TERRAIN_CONCEPT.md`.
 - Toroidal cache and texture uploads: `src/terrain/tile-cache.ts`.
+- Material stack bake, weight rules and macro albedo:
+  `tools/dem/material-stack.ts` + `docs/MATERIALS.md`.
+- Material packing, RG slope conversion and the swatch page:
+  `tools/fetch-materials.ts`, `src/terrain/materials.ts`,
+  `src/terrain/shaders.ts`.
 - Floating origin and tile phase: `src/infinite/main.ts`,
   `src/infinite/flight.ts`.

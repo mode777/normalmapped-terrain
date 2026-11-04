@@ -1,0 +1,96 @@
+/* Material swatch page. */
+
+body.materials-page {
+  overflow-y: auto;
+  background:
+    radial-gradient(120% 120% at 50% 0%, #16202c 0%, #0b0f14 60%),
+    var(--bg);
+}
+
+.materials-header {
+  max-width: 1220px;
+  margin: 0 auto;
+  padding: 34px 24px 10px;
+}
+
+.materials-header h1 {
+  font-size: 1.5rem;
+  letter-spacing: .01em;
+}
+
+.materials-header p {
+  margin-top: 6px;
+  color: var(--text-dim);
+  font-size: .85rem;
+  line-height: 1.45;
+}
+
+.materials-header .status {
+  margin-top: 10px;
+  color: var(--accent);
+  font-family: ui-monospace, monospace;
+  font-size: .75rem;
+}
+
+.materials-header .status.error { color: #ff7d7d; }
+
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  max-width: 1220px;
+  margin: 0 auto;
+  padding: 18px 24px 40px;
+}
+
+.swatch {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.swatch canvas {
+  width: 100%;
+  aspect-ratio: 1;
+  display: block;
+  background: #0b0f14;
+}
+
+.swatch figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px 10px;
+}
+
+.swatch figcaption b {
+  font-size: .76rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.swatch figcaption span {
+  font-size: .68rem;
+  color: var(--text-dim);
+  font-family: ui-monospace, monospace;
+}
+
+.materials-footer {
+  max-width: 1220px;
+  margin: 0 auto;
+  padding: 0 24px 34px;
+  color: var(--text-dim);
+  font-size: .72rem;
+  line-height: 1.5;
+}
+
+.materials-footer a { color: var(--accent); }
+
+@media (max-width: 980px) {
+  .swatch-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .swatch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .materials-header { padding-top: 24px; }
+}

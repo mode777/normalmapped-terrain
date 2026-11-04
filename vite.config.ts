@@ -10,6 +10,7 @@ export default defineConfig({
       input: {
         infinite: resolve(process.cwd(), 'infinite.html'),
         dem: resolve(process.cwd(), 'dem.html'),
+        materials: resolve(process.cwd(), 'materials.html'),
       },
     },
   },

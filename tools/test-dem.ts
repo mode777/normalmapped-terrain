@@ -110,7 +110,12 @@ if (!existsSync(dataDir)) {
 }
 
 const summary = validateDataset(dataDir);
+const material = summary.materialWeightMean && summary.materialWeightRange
+  ? `, materials ${summary.materialStackSize}px/${summary.materialMacroSize}px `
+    + `mean ${summary.materialWeightMean.map((v) => v.toFixed(3)).join('/')} `
+    + `range ${summary.materialWeightRange.map(([a, b]) => `${a.toFixed(2)}-${b.toFixed(2)}`).join('/')}`
+  : '';
 console.log(
   `dem dataset checks: OK (${summary.tileCount} tiles, normal ${summary.normalTileSize}px, `
-  + `max seam ${summary.maxSeamError}, rebaked ${summary.rebuiltNormals} normals)`,
+  + `max seam ${summary.maxSeamError}, rebaked ${summary.rebuiltNormals} normals${material})`,
 );

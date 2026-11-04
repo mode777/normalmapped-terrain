@@ -3,6 +3,8 @@
  * main.ts; this module only binds controls and exposes state setters.
  */
 
+import type { MaterialMode } from './renderer.ts';
+
 export interface UICallbacks {
   onSunChange(azimuth: number, elevation: number): void;
   onNormalStrength(strength: number): void;
@@ -13,6 +15,9 @@ export interface UICallbacks {
   onTileDebug(on: boolean): void;
   onAutoCruise(on: boolean): void;
   onReset(): void;
+  onMaterialMode?(mode: MaterialMode): void;
+  onHeightBlend?(value: number): void;
+  onMaterialNormalStrength?(value: number): void;
 }
 
 export interface UIStats {
@@ -71,6 +76,11 @@ interface UIElements {
   normalStrengthVal: HTMLSpanElement;
   detailStrength: HTMLInputElement;
   detailStrengthVal: HTMLSpanElement;
+  materialMode: HTMLSelectElement | null;
+  heightBlend: HTMLInputElement | null;
+  heightBlendVal: HTMLSpanElement | null;
+  materialNormalStrength: HTMLInputElement | null;
+  materialNormalStrengthVal: HTMLSpanElement | null;
   wireframe: HTMLInputElement;
   lodDebug: HTMLInputElement;
   tileDebug: HTMLInputElement;
@@ -109,6 +119,11 @@ export function initUI(cb: UICallbacks): UIApi {
     normalStrengthVal: byId<HTMLSpanElement>('normal-strength-val'),
     detailStrength: byId<HTMLInputElement>('detail-strength'),
     detailStrengthVal: byId<HTMLSpanElement>('detail-strength-val'),
+    materialMode: optionalById<HTMLSelectElement>('material-mode'),
+    heightBlend: optionalById<HTMLInputElement>('height-blend'),
+    heightBlendVal: optionalById<HTMLSpanElement>('height-blend-val'),
+    materialNormalStrength: optionalById<HTMLInputElement>('material-normal-strength'),
+    materialNormalStrengthVal: optionalById<HTMLSpanElement>('material-normal-strength-val'),
     wireframe: byId<HTMLInputElement>('wireframe'),
     lodDebug: byId<HTMLInputElement>('lod-debug'),
     tileDebug: byId<HTMLInputElement>('tile-debug'),
@@ -139,6 +154,25 @@ export function initUI(cb: UICallbacks): UIApi {
   el.detailStrength.addEventListener('input', () => {
     el.detailStrengthVal.textContent = `${(+el.detailStrength.value).toFixed(2)}×`;
     cb.onDetailStrength(+el.detailStrength.value);
+  });
+
+  el.materialMode?.addEventListener('change', () => {
+    const mode = el.materialMode?.value;
+    if (mode === 'on' || mode === 'off' || mode === 'debug') cb.onMaterialMode?.(mode);
+  });
+
+  el.heightBlend?.addEventListener('input', () => {
+    const value = +el.heightBlend!.value;
+    if (el.heightBlendVal) el.heightBlendVal.textContent = `${value.toFixed(2)}×`;
+    cb.onHeightBlend?.(value);
+  });
+
+  el.materialNormalStrength?.addEventListener('input', () => {
+    const value = +el.materialNormalStrength!.value;
+    if (el.materialNormalStrengthVal) {
+      el.materialNormalStrengthVal.textContent = `${value.toFixed(2)}×`;
+    }
+    cb.onMaterialNormalStrength?.(value);
   });
 
   el.cruiseSpeed.addEventListener('input', () => {

@@ -71,6 +71,7 @@ renders.
 
 ```bash
 npm run test:dem                              # synthetic + checked-in dataset checks
+npm run test:materials                        # packed library dimensions/hashes
 npm run build && npx vite preview &           # serve dist/ on :4173
 npm install --no-save puppeteer-core          # once, next to the repo
 
@@ -81,37 +82,56 @@ node tools/analyze-dem.ts shots-dem
 
 `test:dem` is network-free. It checks the manifest and all 3,080 tile files,
 reconstructs the L0 height grid, verifies every LOD against it, checks the
-seam report, checks the coarse height grid, and rebakes a deterministic sample
-of normal tiles from the reconstructed heights. It is the gate for changes to
-the bake tool or dataset.
+seam report, checks the coarse height grid, rebakes a deterministic sample of
+normal tiles, and validates the material stack/macro (file sizes, IDs, weight
+sums, hashes and slot ranges). `test:materials` validates the packed library
+(20 entries, 512² RGBA, hashes, tile metres, average colors). Together they are
+the gate for changes to the bake tool or dataset.
 
 `screenshot-dem.ts` waits for `window.__dem`, then captures the default view,
-flat normals (both strengths zero), base-on/detail-off and detail-on views,
-orbit movement, a warp, LOD/wireframe, tile grid, the magenta crack test, and a
-boundary view, plus the same detail set as the infinite page: close-up off/on,
-low-sun orientation, cliff, and a warp-away/back pair. `analyze-dem.ts`
-asserts:
+flat normals (both strengths zero and materials off), base-on/detail-off and
+detail-on views, orbit movement, a warp, LOD/wireframe, tile grid, the magenta
+crack test, a boundary view, the detail set (close-up off/on, low-sun
+orientation, cliff, warp pair), and the material set: on/off, boundary, cliff,
+distance, debug/weight view, normal-strength 0, and the swatch page. It also
+writes `material-stats.json` (library/stack/macro sizes, texture units, budget).
+`analyze-dem.ts` asserts:
 
 | Check | Meaning |
 |---|---|
 | no console/page errors | manifest, PNG decode, shaders and uploads succeeded |
 | terrain `std > 8` on every shot | not blank / blown out |
-| black-pixel fraction `< 8%` | no large holes or unlit massifs |
-| normal-map `hf > 1.05 ×` flat-normal `hf` | the 2× normal tiles and LOD bias contribute detail |
+| black-pixel fraction `< 12%` | no large holes or unlit massifs; a 20° sun can put >8% in shadow |
+| normal-map `hf > 1.05 ×` flat-normal `hf` | the shaded stack contributes detail vs the flat palette |
 | detail-on `hf > 1.05 ×` detail-off `hf` | the tiling detail layer contributes near-field shading |
+| material-on `hf > 1.05 ×` material-off `hf` | the textured material layer contributes detail |
+| material-on mean differs from off | the material albedo actually changes the near field |
+| material cliff `std > 8` | rock-scale variation without holes |
+| material distance `std > 8` | the macro albedo keeps far-field variation |
+| material debug `std > 12` | the weight view distinguishes the material set |
+| material stats: 20 layers, 2048² stack, 1024² macro, 30720 m extent, units ≤ device | the library and stack loaded as configured |
 | LOD debug `std > 20` | the ring-colour view is varied |
 | tile-grid `std > 20` | the checkerboard is visible |
 | `< 0.2 %` magenta in the crack shot | no gaps between clipmap rings |
 
 Reference values from the checked-in 2× dataset (Nov 2026): 3,080 tiles,
-~101 MB checked in, 61 resident after priming, 150 resident after a warp,
-102k triangles, 4 draw calls, zero upload errors, normal-map `hf=2.25` vs
-flat `hf=0.36`, and zero crack-test magenta. The DEM page sets
+~107.5 MB dataset plus ~34 MB packed material library, 61 resident after
+priming, 150 resident after a warp, 102k triangles, 4 draw calls, zero upload
+errors, normal-map `hf=1.93` vs flat `hf=0.36`, detail `hf=9.19 → 13.39`,
+material `hf=1.08 → 8.13` and mean `155 → 99.3`, cliff `std=20.9`,
+distance `std=20.1`, debug `std=13.1`, zero crack-test magenta. The material
+layer reports 20 layers, 2048² stack, 1024² macro, 30720 m extent, 8 texture
+units of 32, and ~90.7 MiB of GPU texture. The DEM page sets
 `uNormalLodBias = 1`, so each ring samples the next-finer normal layer; the
 procedural page keeps the bias at 0. The 5×5 cache makes the finer layer cover
 the whole coarse ring, and the normal atlas clamps at its outer edge so the
-toroidal slot-4/slot-0 wrap cannot bleed. The 2× normal PNGs are ~24 KB each; see
-[DEM_DATASET.md](DEM_DATASET.md) for the source and bake details.
+toroidal slot-4/slot-0 wrap cannot bleed. The 2× normal PNGs are ~24 KB each;
+see [DEM_DATASET.md](DEM_DATASET.md) and [MATERIALS.md](MATERIALS.md) for the
+source, bake and material details.
+
+SwiftShader renders this scene at roughly 1 fps; that is a software-rasterizer
+cost, not a real-GPU measurement. The material loop, triplanar rock samples
+and 90 MiB of texture need a real-GPU pass before production tuning.
 
 The boundary shot (`08-boundary.png`) warps to `(6, 0) km`, beyond the old
 3 km camera bound, to prove free flight is not clamped. The pre-baked source
@@ -132,7 +152,7 @@ The QA names:
 
 | Shot | Purpose |
 |---|---|
-| `02-normal0` | flat baseline; **both** base and detail strengths are 0 |
+| `02-normal0` | flat palette baseline; base/detail strengths are 0 and materials are off |
 | `02b-detail-off`, `02c-detail-on` | default-pose layer A/B (the detail may be faded at this distance) |
 | `09-detail-closeup-off`, `10-detail-closeup-on` | same-pose close-up pair; the analyzer compares `hf` |
 | `11-detail-sun-east`, `12-detail-sun-west` | low-sun orientation check; highlights must face the sun |
@@ -147,6 +167,32 @@ existing `normal-strength` slider only controls the base atlas.
 SwiftShader is not representative for anisotropic filtering or specular
 sparkle. Use the screenshots for orientation/tiling/rebase regressions and do a
 real-GPU pass before calling the detail production-ready.
+
+## Material layer
+
+The DEM page loads a 20-material Poly Haven library (24-material cap) and a
+baked four-slot material stack. The material QA names:
+
+| Shot | Purpose |
+|---|---|
+| `16-material-on`, `17-material-off` | same-pose layer A/B; the analyzer compares `hf` and mean color |
+| `18-material-boundary` | wide view of the rock/snow/grass distribution |
+| `19-material-cliff` | steep-face rock and triplanar projection |
+| `20-material-distance` | macro albedo after the material texture fade |
+| `21-material-debug` | weight view: rock gray, scree orange, snow white, grass green |
+| `22-material-normal0` | material normal strength 0 at the same pose; the distribution must not move |
+| `23-material-swatches` | `materials.html` asset grid, all 20 albedo/slope pairs |
+
+The material distribution is a fixed four-material palette for this first
+slice: `rock_face_03`, `gravelly_sand`, `snow_02`, `sparse_grass`. The stack
+is 2048² over the 30.72 km window; the macro albedo is 1024². Material textures
+are 512² arrays with mips/anisotropy. The material-off path preserves the old
+height/slope palette; the infinite page does not load materials in this change.
+
+`puppeteer` runs at roughly 1 fps on SwiftShader with the material shader; the
+headless pass proves the pipeline, not real-GPU performance. A real-GPU
+frame-time and filter-quality pass is outstanding. See
+[MATERIALS.md](MATERIALS.md) for the packed formats, bake rules and findings.
 
 ## Where to run the screenshot loop
 

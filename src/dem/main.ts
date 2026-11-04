@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { ClipmapRenderer } from '../terrain/renderer.ts';
+import type { MaterialMode, MaterialRenderOptions, MaterialStats } from '../terrain/renderer.ts';
 import { TileCache } from '../terrain/tile-cache.ts';
 import { deriveTerrainMetrics } from '../terrain/config.ts';
 import type { TerrainConfig, TileSource } from '../terrain/tile-source.ts';
@@ -16,6 +17,8 @@ import { skyVertexShader, skyFragmentShader } from '../sky-shaders.ts';
 import { FlightController } from '../infinite/flight.ts';
 import { initUI } from '../terrain/ui.ts';
 import type { UIApi } from '../terrain/ui.ts';
+import { loadMaterialLibrary } from '../terrain/materials.ts';
+import { loadMaterialStack } from '../terrain/material-stack.ts';
 import {
   PrebakedTileSource,
   configFromManifest,
@@ -30,6 +33,9 @@ interface AppState {
   sunEl: number;
   normalStrength: number;
   detailStrength: number;
+  materialMode: MaterialMode;
+  heightBlend: number;
+  materialNormalStrength: number;
   wireframe: boolean;
   lodDebug: boolean;
   autoCruise: boolean;
@@ -59,6 +65,10 @@ export interface DemQA {
   setCrackDebug(on: boolean): void;
   setNormalLodBias(bias: number): void;
   setDetailStrength(strength: number): void;
+  setMaterialMode(mode: MaterialMode): void;
+  setHeightBlend(value: number): void;
+  setMaterialNormalStrength(value: number): void;
+  getMaterialStats(): MaterialStats;
   waitForTiles(): Promise<void>;
   warpTo(x: number, z: number, y?: number | null): Promise<void>;
   groundHeight(): number;
@@ -76,6 +86,9 @@ const state: AppState = {
   sunEl: 34,
   normalStrength: 1,
   detailStrength: 0,
+  materialMode: 'on',
+  heightBlend: 0.25,
+  materialNormalStrength: 1,
   wireframe: false,
   lodDebug: false,
   autoCruise: true,
@@ -127,6 +140,18 @@ async function boot(): Promise<void> {
       state.detailStrength = s;
       terrainRenderer?.setDetailStrength(s);
     },
+    onMaterialMode: (mode) => {
+      state.materialMode = mode;
+      terrainRenderer?.setMaterialMode(mode);
+    },
+    onHeightBlend: (value) => {
+      state.heightBlend = value;
+      terrainRenderer?.setHeightBlend(value);
+    },
+    onMaterialNormalStrength: (value) => {
+      state.materialNormalStrength = value;
+      terrainRenderer?.setMaterialNormalStrength(value);
+    },
     onWireframe: (on) => { state.wireframe = on; terrainRenderer?.setWireframe(on); },
     onLodDebug: (on) => {
       state.lodDebug = on;
@@ -154,7 +179,34 @@ async function boot(): Promise<void> {
   await nextFrame();
   initRenderer(metrics.outerExtent);
 
-  ui.setLoading(0.08, 'Building clipmap…');
+  ui.setLoading(0.08, 'Loading material library…');
+  await nextFrame();
+  let materialOptions: MaterialRenderOptions | undefined;
+  if (manifest.materials) {
+    try {
+      const libraryUrl = new URL(manifest.materials.library, document.baseURI).toString();
+      const library = await loadMaterialLibrary(libraryUrl, renderer, (done, total) => {
+        ui.setLoading(0.08 + 0.10 * (done / total), `Loading materials… ${done}/${total}`);
+      });
+      ui.setLoading(0.18, 'Loading material stack…');
+      const stack = await loadMaterialStack(manifestUrl, manifest.materials, library, renderer);
+      materialOptions = {
+        library,
+        stack,
+        fadeStart: 1200,
+        fadeEnd: 6000,
+        heightBlend: state.heightBlend,
+        normalScale: state.materialNormalStrength,
+        aoStrength: 0.7,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('material assets failed:', error);
+      ui.toast(`Materials unavailable: ${message}`, true);
+    }
+  }
+
+  ui.setLoading(0.20, 'Building clipmap…');
   await nextFrame();
   terrainRenderer = new ClipmapRenderer({
     renderer,
@@ -174,7 +226,11 @@ async function boot(): Promise<void> {
       fadeEnd: 500,
       onError: (message) => ui.toast(message, true),
     },
+    ...(materialOptions ? { materials: materialOptions } : {}),
   });
+  terrainRenderer.setMaterialMode(state.materialMode);
+  terrainRenderer.setHeightBlend(state.heightBlend);
+  terrainRenderer.setMaterialNormalStrength(state.materialNormalStrength);
   // The DEM view looks across a 30 km chunk; the infinite page's
   // 2.4 / outerExtent fog would wash out the mid-ground.
   terrainRenderer.setFogDensity(1.1 / metrics.outerExtent);
@@ -213,7 +269,7 @@ async function boot(): Promise<void> {
   ui.setAutoCruise(startCruise);
   ui.setSpeed(flight.speed);
 
-  ui.setLoading(0.12, 'Loading pre-baked tiles…');
+  ui.setLoading(0.20, 'Loading pre-baked tiles…');
   streamer = new TileCache({
     renderer,
     source,
@@ -222,7 +278,7 @@ async function boot(): Promise<void> {
     normalTexture: terrainRenderer.normalTexture,
     heightType: terrainRenderer.heightType,
     onProgress: (ratio, p) => {
-      ui.setLoading(0.12 + ratio * 0.72, `Loading pre-baked tiles… ${p.done}/${p.total}`);
+      ui.setLoading(0.20 + ratio * 0.70, `Loading pre-baked tiles… ${p.done}/${p.total}`);
     },
     onError: (error, job) => {
       console.error(`pre-baked tile ${job.key} failed:`, error);
@@ -408,6 +464,29 @@ function setupQA(): void {
       const label = document.getElementById('detail-strength-val');
       if (label) label.textContent = `${strength.toFixed(2)}×`;
     },
+    setMaterialMode: (mode) => {
+      state.materialMode = mode;
+      terrainRenderer.setMaterialMode(mode);
+      const select = document.getElementById('material-mode');
+      if (select instanceof HTMLSelectElement) select.value = mode;
+    },
+    setHeightBlend: (value) => {
+      state.heightBlend = value;
+      terrainRenderer.setHeightBlend(value);
+      const input = document.getElementById('height-blend');
+      if (input instanceof HTMLInputElement) input.value = String(value);
+      const label = document.getElementById('height-blend-val');
+      if (label) label.textContent = `${value.toFixed(2)}×`;
+    },
+    setMaterialNormalStrength: (value) => {
+      state.materialNormalStrength = value;
+      terrainRenderer.setMaterialNormalStrength(value);
+      const input = document.getElementById('material-normal-strength');
+      if (input instanceof HTMLInputElement) input.value = String(value);
+      const label = document.getElementById('material-normal-strength-val');
+      if (label) label.textContent = `${value.toFixed(2)}×`;
+    },
+    getMaterialStats: () => terrainRenderer.getMaterialStats(),
     waitForTiles: () => streamer.waitForDesired(flight.x, flight.z),
     warpTo: async (x, z, y = null) => {
       flight.setPaused(true);
@@ -418,7 +497,9 @@ function setupQA(): void {
       snapRenderOrigin();
       updateCamera();
       streamer.update(flight.x, flight.z, { force: true });
-      await streamer.waitForDesired(flight.x, flight.z);
+      // Screenshot poses only need the visible 3x3 ring; waiting for the
+      // whole 5x5 prefetch window makes a software-rendered QA run crawl.
+      await streamer.prime(flight.x, flight.z);
     },
     groundHeight: () => flight.groundHeight(),
     getLevelOrigins: () => ({

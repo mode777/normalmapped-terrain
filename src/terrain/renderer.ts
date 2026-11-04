@@ -21,6 +21,8 @@ import {
   assertTextureBudget,
 } from './config.ts';
 import { detailUvOffset } from './detail.ts';
+import type { MaterialLibrary } from './materials.ts';
+import type { MaterialStack } from './material-stack.ts';
 import type { TerrainConfig } from './tile-source.ts';
 import type { SunState } from './sun.ts';
 
@@ -46,6 +48,23 @@ type TerrainUniforms = {
   uDetailTileSize: THREE.IUniform<number>;
   uDetailFadeStart: THREE.IUniform<number>;
   uDetailFadeEnd: THREE.IUniform<number>;
+  uMaterialCount: THREE.IUniform<number>;
+  uMaterialAlbedo: THREE.IUniform<THREE.DataArrayTexture>;
+  uMaterialSlope: THREE.IUniform<THREE.DataArrayTexture>;
+  uMaterialStackIds: THREE.IUniform<THREE.Texture>;
+  uMaterialStackWeights: THREE.IUniform<THREE.Texture>;
+  uMacroAlbedo: THREE.IUniform<THREE.Texture>;
+  uStackExtent: THREE.IUniform<number>;
+  uStackUvOffset: THREE.IUniform<THREE.Vector2>;
+  uMaterialParamsA: THREE.IUniform<THREE.Vector4[]>;
+  uMaterialParamsB: THREE.IUniform<THREE.Vector4[]>;
+  uMaterialUvOffset: THREE.IUniform<THREE.Vector2[]>;
+  uMaterialNormalScale: THREE.IUniform<number>;
+  uMaterialHeightBlend: THREE.IUniform<number>;
+  uMaterialFadeStart: THREE.IUniform<number>;
+  uMaterialFadeEnd: THREE.IUniform<number>;
+  uMaterialMode: THREE.IUniform<number>;
+  uMaterialAoStrength: THREE.IUniform<number>;
   uSunDirection: THREE.IUniform<THREE.Vector3>;
   uSunColor: THREE.IUniform<THREE.Color>;
   uSkyColor: THREE.IUniform<THREE.Color>;
@@ -87,15 +106,52 @@ export interface DetailMaterialOptions {
   onError?: (message: string) => void;
 }
 
+export type MaterialMode = 'off' | 'on' | 'debug';
+
+export interface MaterialRenderOptions {
+  library: MaterialLibrary;
+  stack: MaterialStack;
+  /** Camera distance where material textures start fading, metres. */
+  fadeStart?: number;
+  /** Camera distance where the far-field macro albedo takes over, metres. */
+  fadeEnd?: number;
+  /** Global height-blend bias, 0..1. */
+  heightBlend?: number;
+  /** Global multiplier on material normal slope. */
+  normalScale?: number;
+  /** How strongly the packed AO darkens albedo, 0..1. */
+  aoStrength?: number;
+}
+
+export interface MaterialStats {
+  libraryCount: number;
+  packSize: number;
+  stackSize: number;
+  stackExtent: number;
+  macroSize: number;
+  textureUnits: number;
+  maxTextureUnits: number;
+  approxTextureMiB: number;
+  mode: MaterialMode;
+  fadeStart: number;
+  fadeEnd: number;
+  heightBlend: number;
+  normalScale: number;
+}
+
 export interface ClipmapRendererOptions {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   config: TerrainConfig;
   palette?: ClipmapPalette;
   detail?: DetailMaterialOptions;
+  materials?: MaterialRenderOptions;
 }
 
 const wrapPhase = (v: number, m: number): number => ((v % m) + m) % m;
+const materialModeValue = (mode: MaterialMode): number => (
+  mode === 'on' ? 1 : mode === 'debug' ? 2 : 0
+);
 
 export class ClipmapRenderer {
   readonly config: TerrainConfig;
@@ -120,8 +176,19 @@ export class ClipmapRenderer {
   private readonly detailTileWorldSize: number;
   private detailTexture: THREE.Texture | null = null;
   private detailDisposed = false;
+  private readonly materialLibrary: MaterialLibrary | null;
+  private readonly materialStack: MaterialStack | null;
+  private readonly materialAlbedoPlaceholder: THREE.DataArrayTexture;
+  private readonly materialSlopePlaceholder: THREE.DataArrayTexture;
+  private readonly stackIdsPlaceholder: THREE.DataTexture;
+  private readonly stackWeightsPlaceholder: THREE.DataTexture;
+  private readonly macroPlaceholder: THREE.DataTexture;
+  private readonly materialParamsA: THREE.Vector4[];
+  private readonly materialParamsB: THREE.Vector4[];
+  private readonly materialUvOffset: THREE.Vector2[];
+  private materialMode: MaterialMode;
 
-  constructor({ renderer, scene, config, palette, detail }: ClipmapRendererOptions) {
+  constructor({ renderer, scene, config, palette, detail, materials }: ClipmapRendererOptions) {
     this.renderer = renderer;
     this.scene = scene;
     this.config = config;
@@ -135,6 +202,46 @@ export class ClipmapRenderer {
     this.detailTileWorldSize = Math.max(1e-3, detail?.tileWorldSize ?? 16);
     const detailFadeStart = detail?.fadeStart ?? 0;
     const detailFadeEnd = Math.max(detailFadeStart + 1, detail?.fadeEnd ?? 1);
+
+    const textureUnits = 8;
+    if (textureUnits > renderer.capabilities.maxTextures) {
+      throw new Error(
+        `material shader uses ${textureUnits} texture units, device exposes ${renderer.capabilities.maxTextures}`,
+      );
+    }
+    this.materialLibrary = materials?.library ?? null;
+    this.materialStack = materials?.stack ?? null;
+    if (this.materialLibrary && this.materialLibrary.count > 24) {
+      throw new Error(`material library has ${this.materialLibrary.count} layers, cap is 24`);
+    }
+    if (this.materialStack && (this.materialStack.size > 4096 || this.materialStack.macroSize > 4096)) {
+      throw new Error('material stack exceeds the 4096 texel budget');
+    }
+    this.materialMode = this.materialLibrary ? 'on' : 'off';
+    this.materialAlbedoPlaceholder = this.createMaterialAlbedoPlaceholder();
+    this.materialSlopePlaceholder = this.createMaterialSlopePlaceholder();
+    this.stackIdsPlaceholder = this.createStackIdsPlaceholder();
+    this.stackWeightsPlaceholder = this.createStackWeightsPlaceholder();
+    this.macroPlaceholder = this.createMacroPlaceholder();
+    const materialFadeStart = materials?.fadeStart ?? 0;
+    const materialFadeEnd = Math.max(materialFadeStart + 1, materials?.fadeEnd ?? 1);
+    const materialHeightBlend = Math.max(0, Math.min(1, materials?.heightBlend ?? 0.25));
+    const materialNormalScale = Math.max(0, Math.min(2, materials?.normalScale ?? 1));
+    const materialAoStrength = Math.max(0, Math.min(1, materials?.aoStrength ?? 0.7));
+    const entries = this.materialLibrary?.entries ?? [];
+    this.materialParamsA = Array.from({ length: 24 }, (_, i) => {
+      const entry = entries[i];
+      return entry
+        ? new THREE.Vector4(entry.tileMeters, entry.slopeScale, entry.normalStrength, entry.roughness)
+        : new THREE.Vector4(1, 1, 0, 1);
+    });
+    this.materialParamsB = Array.from({ length: 24 }, (_, i) => {
+      const entry = entries[i];
+      return entry
+        ? new THREE.Vector4(entry.specular, entry.projection === 'triplanar' ? 1 : 0, 1, 0)
+        : new THREE.Vector4(0, 0, 1, 0);
+    });
+    this.materialUvOffset = Array.from({ length: 24 }, () => new THREE.Vector2(0, 0));
 
     this.terrainUniforms = {
       uHeightArray: { value: this.heightTexture },
@@ -160,6 +267,23 @@ export class ClipmapRenderer {
       uDetailTileSize: { value: this.detailTileWorldSize },
       uDetailFadeStart: { value: detailFadeStart },
       uDetailFadeEnd: { value: detailFadeEnd },
+      uMaterialCount: { value: this.materialLibrary?.count ?? 0 },
+      uMaterialAlbedo: { value: this.materialLibrary?.albedoHeight ?? this.materialAlbedoPlaceholder },
+      uMaterialSlope: { value: this.materialLibrary?.slopeRough ?? this.materialSlopePlaceholder },
+      uMaterialStackIds: { value: this.materialStack?.ids ?? this.stackIdsPlaceholder },
+      uMaterialStackWeights: { value: this.materialStack?.weights ?? this.stackWeightsPlaceholder },
+      uMacroAlbedo: { value: this.materialStack?.macro ?? this.macroPlaceholder },
+      uStackExtent: { value: this.materialStack?.extent ?? 1 },
+      uStackUvOffset: { value: new THREE.Vector2(0, 0) },
+      uMaterialParamsA: { value: this.materialParamsA },
+      uMaterialParamsB: { value: this.materialParamsB },
+      uMaterialUvOffset: { value: this.materialUvOffset },
+      uMaterialNormalScale: { value: materialNormalScale },
+      uMaterialHeightBlend: { value: materialHeightBlend },
+      uMaterialFadeStart: { value: materialFadeStart },
+      uMaterialFadeEnd: { value: materialFadeEnd },
+      uMaterialMode: { value: materialModeValue(this.materialMode) },
+      uMaterialAoStrength: { value: materialAoStrength },
       uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
       uSunColor: { value: new THREE.Color(1, 0.97, 0.9) },
       uSkyColor: { value: new THREE.Color(0.20, 0.42, 0.72) },
@@ -311,6 +435,75 @@ export class ClipmapRenderer {
     return texture;
   }
 
+  private createMaterialAlbedoPlaceholder(): THREE.DataArrayTexture {
+    const texture = new THREE.DataArrayTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, 1);
+    texture.format = THREE.RGBAFormat;
+    texture.type = THREE.UnsignedByteType;
+    texture.colorSpace = THREE.NoColorSpace;
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.generateMipmaps = false;
+    texture.flipY = false;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private createMaterialSlopePlaceholder(): THREE.DataArrayTexture {
+    const texture = new THREE.DataArrayTexture(new Uint8Array([128, 128, 255, 255]), 1, 1, 1);
+    texture.format = THREE.RGBAFormat;
+    texture.type = THREE.UnsignedByteType;
+    texture.colorSpace = THREE.NoColorSpace;
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.generateMipmaps = false;
+    texture.flipY = false;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private createStackIdsPlaceholder(): THREE.DataTexture {
+    const texture = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1, THREE.RGBAFormat);
+    texture.colorSpace = THREE.NoColorSpace;
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.generateMipmaps = false;
+    texture.flipY = false;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private createStackWeightsPlaceholder(): THREE.DataTexture {
+    const texture = new THREE.DataTexture(new Uint8Array([255, 0, 0, 0]), 1, 1, THREE.RGBAFormat);
+    texture.colorSpace = THREE.NoColorSpace;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.generateMipmaps = false;
+    texture.flipY = false;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private createMacroPlaceholder(): THREE.DataTexture {
+    const texture = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1, THREE.RGBAFormat);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.generateMipmaps = false;
+    texture.flipY = false;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
   private loadDetailTexture(detail: DetailMaterialOptions): void {
     new THREE.TextureLoader().load(
       detail.textureUrl,
@@ -365,6 +558,19 @@ export class ClipmapRenderer {
     );
     const detailOffset = detailUvOffset(renderOrigin.x, renderOrigin.y, this.detailTileWorldSize);
     this.terrainUniforms.uDetailUvOffset.value.set(detailOffset.x, detailOffset.y);
+    if (this.materialStack) {
+      const offset = this.materialStack.uvOffset(renderOrigin.x, renderOrigin.y);
+      this.terrainUniforms.uStackUvOffset.value.set(offset.x, offset.y);
+    }
+    if (this.materialLibrary) {
+      for (let i = 0; i < this.materialLibrary.count; i++) {
+        const entry = this.materialLibrary.entries[i];
+        this.materialUvOffset[i]?.set(
+          wrapPhase(renderOrigin.x, entry.tileMeters),
+          wrapPhase(renderOrigin.y, entry.tileMeters),
+        );
+      }
+    }
     this.terrainUniforms.uPixelScale.value = this.pixelScale(camera);
 
     for (const { geo, levels } of this.originTargets) {
@@ -425,6 +631,53 @@ export class ClipmapRenderer {
     this.terrainUniforms.uDetailStrength.value = Math.max(0, Math.min(2, strength));
   }
 
+  setMaterialMode(mode: MaterialMode): void {
+    this.materialMode = this.materialLibrary ? mode : 'off';
+    this.terrainUniforms.uMaterialMode.value = materialModeValue(this.materialMode);
+  }
+
+  getMaterialMode(): MaterialMode {
+    return this.materialMode;
+  }
+
+  setHeightBlend(value: number): void {
+    this.terrainUniforms.uMaterialHeightBlend.value = Math.max(0, Math.min(1, value));
+  }
+
+  setMaterialNormalStrength(value: number): void {
+    this.terrainUniforms.uMaterialNormalScale.value = Math.max(0, Math.min(2, value));
+  }
+
+  getMaterialStats(): MaterialStats {
+    const library = this.materialLibrary;
+    const stack = this.materialStack;
+    const packSize = library?.manifest.packSize ?? 0;
+    const count = library?.count ?? 0;
+    const bytesPerLayer = packSize * packSize * 4;
+    const arrayMiB = count * bytesPerLayer * 2 * (4 / 3) / (1024 * 1024);
+    const stackMiB = stack
+      ? (
+        stack.size * stack.size * 4 * 2
+        + stack.macroSize * stack.macroSize * 4 * (4 / 3)
+      ) / (1024 * 1024)
+      : 0;
+    return {
+      libraryCount: count,
+      packSize,
+      stackSize: stack?.size ?? 0,
+      stackExtent: stack?.extent ?? 0,
+      macroSize: stack?.macroSize ?? 0,
+      textureUnits: 8,
+      maxTextureUnits: this.renderer.capabilities.maxTextures,
+      approxTextureMiB: arrayMiB + stackMiB,
+      mode: this.materialMode,
+      fadeStart: this.terrainUniforms.uMaterialFadeStart.value,
+      fadeEnd: this.terrainUniforms.uMaterialFadeEnd.value,
+      heightBlend: this.terrainUniforms.uMaterialHeightBlend.value,
+      normalScale: this.terrainUniforms.uMaterialNormalScale.value,
+    };
+  }
+
   /** Negative normal LOD bias; 1 samples the next-finer normal layer. */
   setNormalLodBias(bias: number): void {
     this.terrainUniforms.uNormalLodBias.value = Math.max(0, Math.min(3, bias));
@@ -466,5 +719,12 @@ export class ClipmapRenderer {
     this.detailDisposed = true;
     this.detailPlaceholder.dispose();
     this.detailTexture?.dispose();
+    this.materialAlbedoPlaceholder.dispose();
+    this.materialSlopePlaceholder.dispose();
+    this.stackIdsPlaceholder.dispose();
+    this.stackWeightsPlaceholder.dispose();
+    this.macroPlaceholder.dispose();
+    this.materialLibrary?.dispose();
+    this.materialStack?.dispose();
   }
 }

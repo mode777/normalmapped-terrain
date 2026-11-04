@@ -15,7 +15,9 @@
     "test:infinite": "node tools/test-infinite.ts",
     "bake:detail": "node tools/bake-detail-normal.ts",
     "bake:dem": "node tools/bake-dem.ts",
-    "test:dem": "node tools/test-dem.ts"
+    "bake:materials": "node tools/fetch-materials.ts",
+    "test:dem": "node tools/test-dem.ts",
+    "test:materials": "node tools/test-materials.ts"
   },
   "dependencies": {
     "three": "^0.180.0"
@@ -27,6 +29,7 @@
     "geotiff": "^3.0.5",
     "pngjs": "^7.0.0",
     "proj4": "^2.22.0",
+    "sharp": "^0.35.5",
     "typescript": "^5.9.3",
     "vite": "^7.0.0"
   }

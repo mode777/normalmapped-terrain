@@ -17,6 +17,28 @@ export interface DemManifestRange {
   count: number;
 }
 
+export interface DemMaterialBlock {
+  library: string;
+  slots: [string, string, string, string];
+  stack: {
+    ids: string;
+    weights: string;
+    size: number;
+    extent: number;
+    encoding: 'rgba8-ids-weights';
+  };
+  macro: string;
+  macroSize: number;
+  macroEncoding: 'rgba8';
+  bakeVersion: number;
+  seed: number;
+  hashes: {
+    ids: string;
+    weights: string;
+    macro: string;
+  };
+}
+
 export interface DemManifest {
   version: number;
   dataset: string;
@@ -68,6 +90,7 @@ export interface DemManifest {
   tileRanges: DemManifestRange[];
   tileCount: number;
   seamReport: { file: string; threshold: number; maxError: number };
+  materials?: DemMaterialBlock;
 }
 
 const clamp = (v: number, a: number, b: number): number => Math.max(a, Math.min(b, v));
@@ -76,7 +99,9 @@ export async function loadDemManifest(url: string): Promise<DemManifest> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`failed to load DEM manifest: HTTP ${response.status}`);
   const manifest = await response.json() as DemManifest;
-  if (manifest.version !== 1) throw new Error(`unsupported DEM manifest version ${manifest.version}`);
+  if (manifest.version !== 1 && manifest.version !== 2) {
+    throw new Error(`unsupported DEM manifest version ${manifest.version}`);
+  }
   if (manifest.heightEncoding !== 'uint16le-normalized') {
     throw new Error(`unsupported height encoding ${manifest.heightEncoding}`);
   }
@@ -85,6 +110,16 @@ export async function loadDemManifest(url: string): Promise<DemManifest> {
   }
   if (!Array.isArray(manifest.tileRanges) || manifest.tileRanges.length !== manifest.levels) {
     throw new Error('DEM manifest tileRanges do not match levels');
+  }
+  if (manifest.materials) {
+    const m = manifest.materials;
+    if (m.slots.length !== 4) throw new Error('DEM material slots must contain four IDs');
+    if (m.stack.encoding !== 'rgba8-ids-weights') {
+      throw new Error(`unsupported material stack encoding ${m.stack.encoding}`);
+    }
+    if (m.stack.size <= 0 || m.stack.extent <= 0 || m.macroSize <= 0) {
+      throw new Error('DEM material stack/macro dimensions must be positive');
+    }
   }
   return manifest;
 }
@@ -131,7 +166,10 @@ async function decodeNormal(blob: Blob, tileSize: number): Promise<Uint8Array> {
   const canvas = typeof OffscreenCanvas !== 'undefined'
     ? new OffscreenCanvas(tileSize, tileSize)
     : Object.assign(document.createElement('canvas'), { width: tileSize, height: tileSize });
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d') as
+    | OffscreenCanvasRenderingContext2D
+    | CanvasRenderingContext2D
+    | null;
   if (!ctx) throw new Error('could not create a 2D canvas for normal decoding');
   ctx.drawImage(bitmap, 0, 0);
   bitmap.close();

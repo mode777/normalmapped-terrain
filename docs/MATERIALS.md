@@ -1,0 +1,181 @@
+# Terrain materials
+
+The DEM terrain uses a checked-in library of 20 Poly Haven textures and a baked
+four-slot material distribution. This is the first slice of the multi-biome
+material plan: the synthetic biome world and the infinite adapter are follow-up
+changes.
+
+## Library
+
+- **Source:** [Poly Haven](https://polyhaven.com/textures), CC0. The fetch tool
+  sends the required unique User-Agent; the runtime never calls the live API.
+- **Cap:** 24 materials. The checked-in set is 20; the loader rejects anything
+  larger before allocating textures.
+- **Pack:** `512 × 512` RGBA8 PNGs, two files per material:
+  - `albedo-height.png`: RGB sRGB albedo, A normalized height (0.5 neutral).
+  - `slope-rough.png`: RG normal-map slope (object-space, V = +z), B roughness,
+    A ambient occlusion.
+- **Layers:** two `DataArrayTexture`s, one layer per material, with mips and
+  anisotropy. Albedo is sampled as sRGB; slope/rough/ao is linear.
+- **Physical scale:** `tileMeters` is Poly Haven's `dimensions / 1000`. The
+  shader uses it as the default world UV scale, so the normal slope keeps its
+  photographed physical size.
+- **Slope encoding:** the shader decodes `s = (rg * 2 - 1) * slopeScale`; the
+  per-material `slopeScale` prevents clipping steep gradients. Poly Haven's
+  `nor_dx` (green-down) is converted to the repo's V = +z frame during packing.
+- **Size:** about 33.5 MiB packed. Source downloads live in the gitignored
+  `.cache/materials/`.
+
+The 20 materials cover arctic/alpine, tundra, boreal/temperate, tropical and
+arid roles. The first Jotunheimen stack uses four of them:
+`rock_face_03` (cliff rock, triplanar), `gravelly_sand` (scree),
+`snow_02` (snow) and `sparse_grass` (alpine grass).
+
+## Distribution stack
+
+`public/data/jotunheimen/`:
+
+```
+stack-ids.png      2048^2 RGBA8   four library indices per texel
+stack-weights.png  2048^2 RGBA8   four normalized weights (sum 255)
+macro-albedo.png   1024^2 RGBA8   low-frequency far-field albedo
+```
+
+- **Extent:** 30,720 m, centred on the DEM local frame (15 m/texel for the
+  stack, 30 m/texel for the macro).
+- **IDs:** constant for this slice: library indices `2, 6, 0, 9` for
+  rock/scree/snow/grass. A future multi-palette bake can vary them.
+- **Weights:** the four bytes sum to 255. The shader normalizes after linear
+  filtering and uses only slots above a small threshold.
+- **Row order:** row 0 is north, +z is south; load with `flipY = false`, matching
+  the height tiles.
+- **Macro:** the weighted average of the palette's average colors with a
+  low-frequency noise term. Beyond the material fade the shader uses it as the
+  far-field albedo.
+
+The bake derives weights from the 10 m L0 height grid:
+
+- **Snow:** high normalized height (start 0.84, ~2100 m), reduced on steep
+  slopes, boosted on north-facing slopes (`-N.z`).
+- **Scree:** moderate/steep slopes below the snow line, broken up by band noise.
+- **Grass:** low, gentle, concave ground.
+- **Rock:** the implicit remainder, so steep cliffs are rock-dominant.
+
+Convexity/concavity from the height-grid Laplacian and seeded low-frequency
+value noise are secondary inputs. The current window's mean weights are
+`0.844 / 0.018 / 0.014 / 0.123` (rock/scree/snow/grass); the stack has
+non-degenerate ranges for all four.
+
+## Shader composition
+
+The stack is sampled in world space:
+
+```text
+uv = vWorldPos.xz / uStackExtent + 0.5 + uStackUvOffset
+uStackUvOffset = absoluteRenderOrigin.xz / uStackExtent
+```
+
+`vWorldPos` is render-space; adding the absolute render-origin offset keeps the
+distribution world-locked across floating-origin rebases. The stack is clamped,
+not repeated.
+
+For each active slot:
+
+1. Sample the packed albedo/height and slope/rough/ao.
+2. Bias the stack weight by the material height:
+   `w' = max(w + (h - 0.5) * uMaterialHeightBlend, w * 0.05)`; renormalize.
+3. Sample the material normal as an RG slope. Planar materials use the top
+   frame; the rock material is triplanar (top, z-side, x-side) with weights
+   from `pow(abs(Nbase), 4)`.
+4. Convert the blended material normal to a horizontal slope contribution and
+   add it to the base slope:
+   `sTotal = sBase * uNormalStrength + Σ w' * slope_i * normalStrength_i + detail`.
+5. Near-field albedo is the weighted material albedo times a macro-luma tint and
+   AO; beyond `uMaterialFadeEnd` it is the macro albedo.
+
+Material normal strength and detail strength are independent uniforms. Changing
+either does not move the baked distribution. The material path is bypassed
+when `uMaterialMode == 0` or no library/stack is configured; the old height/
+slope palette is the fallback.
+
+## Poly Haven pipeline
+
+```bash
+npm run bake:materials            # fetch/cache/pack all 20
+npm run test:materials            # 24 cap, 512², hashes, metadata
+node tools/fetch-materials.ts --check-manifest
+node tools/fetch-materials.ts --only rock_face_03   # single-material iteration
+```
+
+`tools/materials/polyhaven.json` is the curated source list: id, role, biome,
+tile metres, projection, shading parameters and map choices.
+`tools/fetch-materials.ts` calls `https://api.polyhaven.com/files/{id}` with
+`User-Agent: normalmapped-terrain/0.1`, verifies size/MD5, resizes to 512²,
+converts `nor_dx` to RG slopes, packs the two PNGs and writes
+`public/materials/manifest.json`. `sharp` is a devDependency only; the packed
+assets are checked in, so the runtime and CI build do not need it.
+
+The packed PNGs are what `materials.html` shows. That page is the asset-level
+QA view: all 20 albedo/slope pairs are shaded from the packed slope map.
+
+## Dataset bake
+
+The full DEM bake writes the stack/macro after the height/normal tiles:
+
+```bash
+npm run bake:dem -- --config tools/dem/jotunheimen.json
+```
+
+When only the palette, snowline or noise changes, rebake from the checked-in L0
+height tiles without the source GeoTIFF:
+
+```bash
+node tools/bake-dem.ts --config tools/dem/jotunheimen.json --materials-only
+node tools/bake-dem.ts --config tools/dem/jotunheimen.json --check-materials
+```
+
+`--materials-only` reads the checked-in L0 tiles, rewrites the stack/macro and
+updates the manifest's material block and hashes. `--check-materials` rebakes
+into a temporary directory and compares hashes. `npm run test:dem` validates
+the checked-in files (IDs, weight sums, ranges, dimensions and hashes) without
+network access.
+
+## Measured results and limitations
+
+From the Nov 2026 headless pass (SwiftShader, 1600×900):
+
+- Material library: 20 layers, 512², two arrays; ~90.7 MiB of GPU texture
+  including the 2048² stack and 1024² macro.
+- Shader texture units: 8 of the device's 32; 4 draw calls; ~102k triangles at
+  the default DEM pose.
+- Material on/off: `hf 1.08 → 8.13`, mean `155 → 99.3`; the layer contributes
+  both texture detail and color.
+- Material cliff: `std=20.9`; distance: `std=20.1`; debug weight view:
+  `std=13.1`; all 20 swatches load.
+- SwiftShader runs the material shader at roughly **1 fps**. That is a
+  software-rasterizer measurement, not a real-GPU frame time.
+
+Limitations:
+
+- Jotunheimen uses a fixed four-material palette; the 20-material library is
+  loaded but the other 16 are for the synthetic world. Multi-palette
+  transition-band baking is the next change.
+- The stack is a whole-window 2048² map (~15 m/texel); per-LOD stack tiles are
+  deferred until the world grows past ~50 km.
+- Only the rock material is triplanar. Grass, snow and scree stay planar; their
+  cliff stretch is acceptable at the current art scale.
+- The macro albedo is a baked palette average, not an aerial-texture layer.
+- No real landcover (AR50/N50) is used.
+- Material textures are 512²; the packed library is ~33.5 MiB. A larger library
+  or higher resolution needs a streaming/virtual-texture follow-up.
+- The 20-material set is curated by eye; Poly Haven has no tundra/scree tags and
+  its tropical ground coverage is the weakest part of the set.
+
+## Follow-ups
+
+1. `add-synthetic-biome-world` — multi-biome palettes, transition bands and the
+   macro/aerial layer.
+2. `add-infinite-material-adapter` — the infinite page generates the same stack.
+3. `add-material-streaming` — per-LOD tiles or virtual texturing for larger
+   worlds/libraries.
+4. `add-real-landcover-materials` — optional AR50/N50 weights.

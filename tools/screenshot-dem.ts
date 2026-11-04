@@ -36,6 +36,7 @@ const browser = await puppeteer.launch({
   headless: true,
   args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
   defaultViewport: { width: 1600, height: 900 },
+  protocolTimeout: 900000,
 });
 
 const page = await browser.newPage();
@@ -71,6 +72,7 @@ const read = () => page.evaluate(() => {
     state: q.state,
     ground: q.groundHeight(),
     detailStrength: q.state.detailStrength,
+    material: q.getMaterialStats(),
     camera: q.camera.position.toArray(),
   };
 });
@@ -88,6 +90,18 @@ const setNormal = (value: number): Promise<void> => page.evaluate((v) => {
 
 const setDetail = (value: number): Promise<void> => page.evaluate((v) => {
   window.__dem.setDetailStrength(v);
+}, value);
+
+const setMaterialMode = (mode: 'on' | 'off' | 'debug'): Promise<void> => page.evaluate((m) => {
+  window.__dem.setMaterialMode(m);
+}, mode);
+
+const setHeightBlend = (value: number): Promise<void> => page.evaluate((v) => {
+  window.__dem.setHeightBlend(v);
+}, value);
+
+const setMaterialNormalStrength = (value: number): Promise<void> => page.evaluate((v) => {
+  window.__dem.setMaterialNormalStrength(v);
 }, value);
 
 const setSun = (azimuth: number, elevation: number): Promise<void> => page.evaluate(({ az, el }) => {
@@ -117,14 +131,20 @@ const detailPose = async (
 };
 
 console.log('stats initial:', JSON.stringify(await read()));
+const initial = await read();
+writeFileSync(`${OUT}/material-stats.json`, JSON.stringify(initial.material, null, 2));
 await shot('01-default');
 
-// Same pose, flat normal: isolates the normal map's contribution.
+// Same pose, flat normals and no materials: the old palette baseline. The
+// material-on path keeps the material albedo, so the material-off toggle is
+// the only way to isolate the base normal contribution.
+await setMaterialMode('off');
 await setNormal(0);
 await setDetail(0);
 await shot('02-normal0');
 
 await setNormal(1);
+await setMaterialMode('on');
 await setDetail(0);
 await shot('02b-detail-off');
 
@@ -203,6 +223,49 @@ await page.evaluate(async () => { await window.__dem.warpTo(25000, 0); });
 await page.evaluate(async () => { await window.__dem.warpTo(2500, 0); });
 await detailPose(2500, 0, 80, -0.35, Math.PI / 2);
 await shot('15-detail-warp-after');
+
+// Material-layer checks. Keep the detail layer off so the on/off pair
+// isolates the material albedo/normal contribution.
+await setDetail(0);
+await setMaterialMode('on');
+await setHeightBlend(0.25);
+await setMaterialNormalStrength(1);
+await detailPose(2500, 0, 120, -0.35, Math.PI / 2);
+await shot('16-material-on');
+await setMaterialMode('off');
+await shot('17-material-off');
+
+await setMaterialMode('on');
+await detailPose(2500, 0, 900, -0.18, Math.PI / 2);
+await shot('18-material-boundary');
+
+await detailPose(2500, 0, 60, -0.2, Math.PI / 2);
+await shot('19-material-cliff');
+
+await detailPose(0, 0, 3500, -0.12, Math.PI / 2);
+await shot('20-material-distance');
+
+await setMaterialMode('debug');
+await detailPose(6000, 0, 220, -0.18, Math.PI / 2);
+await shot('21-material-debug');
+
+await setMaterialMode('on');
+await detailPose(2500, 0, 120, -0.35, Math.PI / 2);
+await setMaterialNormalStrength(0);
+await shot('22-material-normal0');
+await setMaterialNormalStrength(1);
+
+// Asset-level swatch page.
+const swatchUrl = new URL('materials.html', TARGET).toString();
+console.log(`goto ${swatchUrl}`);
+await page.goto(swatchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+try {
+  await page.waitForFunction(() => window.__materials?.ready === true, { timeout: 120000 });
+} catch {
+  errors.push('SWATCH TIMEOUT: materials.html never finished loading');
+}
+await sleep(800);
+await page.screenshot({ path: `${OUT}/23-material-swatches.png`, fullPage: true });
 
 writeFileSync(`${OUT}/console.json`, JSON.stringify({ errors, messages }, null, 2));
 console.log('ERRORS:', JSON.stringify(errors, null, 2));

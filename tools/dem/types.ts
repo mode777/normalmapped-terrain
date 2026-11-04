@@ -16,6 +16,16 @@ export interface LocalGeoTiffSourceConfig {
 
 export type DemSourceConfig = WcsSourceConfig | LocalGeoTiffSourceConfig;
 
+export interface DemMaterialConfig {
+  /** Packed material library manifest, relative to the repo root. */
+  library: string;
+  /** Four material IDs for the fixed stack palette. */
+  slots: [string, string, string, string];
+  stackSize: number;
+  macroSize: number;
+  seed: number;
+}
+
 export interface DemConfig {
   dataset: string;
   source: DemSourceConfig;
@@ -31,6 +41,7 @@ export interface DemConfig {
   cacheDir?: string;
   license: string;
   attribution: string;
+  materials?: DemMaterialConfig;
 }
 
 export interface DemGrid {
@@ -70,6 +81,29 @@ export interface SeamReport {
   version: number;
   threshold: number;
   levels: SeamLevelReport[];
+}
+
+export interface MaterialDatasetBlock {
+  /** Runtime-relative path under public/. */
+  library: string;
+  slots: [string, string, string, string];
+  stack: {
+    ids: string;
+    weights: string;
+    size: number;
+    extent: number;
+    encoding: 'rgba8-ids-weights';
+  };
+  macro: string;
+  macroSize: number;
+  macroEncoding: 'rgba8';
+  bakeVersion: number;
+  seed: number;
+  hashes: {
+    ids: string;
+    weights: string;
+    macro: string;
+  };
 }
 
 export interface Manifest {
@@ -127,4 +161,5 @@ export interface Manifest {
     threshold: number;
     maxError: number;
   };
+  materials?: MaterialDatasetBlock;
 }

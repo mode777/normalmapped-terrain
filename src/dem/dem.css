@@ -49,6 +49,31 @@
 
 #toast { pointer-events: none; }
 
+.select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 7px 0;
+  font-size: .75rem;
+  color: var(--text-dim);
+}
+
+.select-row select {
+  flex: 0 0 120px;
+  padding: 4px 6px;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .04);
+  color: var(--text);
+  font: inherit;
+  font-size: .72rem;
+}
+
+.select-row select:focus-visible {
+  outline: 1px solid var(--accent);
+}
+
 .dataset-link {
   display: inline-block;
   margin-top: 10px;

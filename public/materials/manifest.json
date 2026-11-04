@@ -1,0 +1,853 @@
+{
+  "version": 1,
+  "source": "polyhaven",
+  "license": "CC0",
+  "attribution": "Poly Haven (polyhaven.com), CC0. Packed and resampled for this project.",
+  "packSize": 512,
+  "albedoEncoding": "rgba8-albedo-height",
+  "slopeEncoding": "rgba8-slope-rough-ao",
+  "normalConvention": "object-space-slope-v+z",
+  "sourceResolution": "1k",
+  "materials": [
+    {
+      "id": "snow_02",
+      "name": "Snow 02",
+      "biome": "arctic",
+      "role": "snow",
+      "tileMeters": 2,
+      "projection": "planar",
+      "normalStrength": 0.7,
+      "roughness": 0.55,
+      "specular": 0.08,
+      "slopeScale": 1,
+      "averageColor": [
+        0.6478,
+        0.6475,
+        0.6553
+      ],
+      "albedoHeight": "snow_02/albedo-height.png",
+      "slopeRough": "snow_02/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "6c440614b40f648836237bd25c0a4052f15332741642f1d0740ee5eca93170ab",
+        "slopeRough": "8c932e72c4e1cefb379bad937ad85e86bd65359613aa16c9eeaaf6e60e293d70"
+      },
+      "source": {
+        "id": "snow_02",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "fc54766c6b36ff298699115a619d440b",
+          "nor_dx": "a0125d726a545e689015a50d3c3acdd8",
+          "Displacement": "d2133b5c5a7fb3515ae538ceb4e25308",
+          "Rough": "1dbae0269e53dbf80d4fd1c4335f25a2",
+          "AO": "c3cbf062262bc7ac6ecc9099ac81b4a3"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "snow_field_aerial",
+      "name": "Snow Field Aerial",
+      "biome": "arctic",
+      "role": "snow-macro",
+      "tileMeters": 80,
+      "projection": "planar",
+      "normalStrength": 0.55,
+      "roughness": 0.6,
+      "specular": 0.06,
+      "slopeScale": 0.5,
+      "averageColor": [
+        0.5286,
+        0.527,
+        0.5787
+      ],
+      "albedoHeight": "snow_field_aerial/albedo-height.png",
+      "slopeRough": "snow_field_aerial/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "ef1f31b78663481dd692f35969a54141d25e50dcfe46bacd2c0a34d42f616b35",
+        "slopeRough": "09099ff92c6e88d1e8e631586e3972cefba108f3d321be481fb3865436b84307"
+      },
+      "source": {
+        "id": "snow_field_aerial",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "62563cb0342c3428295342cb2b9f593b",
+          "nor_dx": "c3e69d82ecb9e0e31c98eb90588ef8b7",
+          "Displacement": "657c0844afe2278b76c642a80cacc3d0",
+          "Rough": "0f7979d92a30b574bed4a456425114a4",
+          "AO": "b453a50e233af0a35c1f365de097e145"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "rock_face_03",
+      "name": "Rock Face 03",
+      "biome": "alpine",
+      "role": "cliff-rock",
+      "tileMeters": 2.7,
+      "projection": "triplanar",
+      "normalStrength": 1,
+      "roughness": 0.9,
+      "specular": 0.03,
+      "slopeScale": 1,
+      "averageColor": [
+        0.5133,
+        0.4116,
+        0.3152
+      ],
+      "albedoHeight": "rock_face_03/albedo-height.png",
+      "slopeRough": "rock_face_03/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "d09157cbe8166410aa1c043f7750123f1744864042bf9063e888eda86342d454",
+        "slopeRough": "9dfee018e8dd37d99986507945db2e046b511226bd2df820e05be46ce38f5bd0"
+      },
+      "source": {
+        "id": "rock_face_03",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "e4c34abb1aad5befe12754fad507147a",
+          "nor_dx": "ac27ba72082d122dc6c9b68bce352cbe",
+          "Displacement": "9d51d6b2496de79f97b80d43ff1dd7fb",
+          "Rough": "bbb2c7dafde3f81808fa7404d4527a56",
+          "AO": "07e0ca4b418800f288cc1d0740c3b254"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "rocky_terrain_02",
+      "name": "Rocky Terrain 02",
+      "biome": "alpine",
+      "role": "rock-macro",
+      "tileMeters": 90,
+      "projection": "planar",
+      "normalStrength": 0.65,
+      "roughness": 0.92,
+      "specular": 0.02,
+      "slopeScale": 1,
+      "averageColor": [
+        0.3133,
+        0.3075,
+        0.1101
+      ],
+      "albedoHeight": "rocky_terrain_02/albedo-height.png",
+      "slopeRough": "rocky_terrain_02/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "61a95634809785a4f01ca3b96a28ca44ded4b50a8299ecbb6c0adaa1267b085b",
+        "slopeRough": "7b01e5090e7a347ffbc679ee13a40aaed02181b5f205a471130d14a235ab6f03"
+      },
+      "source": {
+        "id": "rocky_terrain_02",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "cf604d3868398a6a996cb5ba330dd3ab",
+          "nor_dx": "55851e8db735023d7cc4d99726e2da3c",
+          "Displacement": "d3211b5ef47eebeaea56f855cc33aafe",
+          "Rough": "f940e341352cca8bdd2dc4d0c30f3da1",
+          "AO": "d32e55d52f460c65861fe9451835bdd2"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "rock_pitted_mossy",
+      "name": "Rock Pitted Mossy",
+      "biome": "tundra",
+      "role": "lichen-rock",
+      "tileMeters": 1,
+      "projection": "planar",
+      "normalStrength": 1,
+      "roughness": 0.88,
+      "specular": 0.025,
+      "slopeScale": 2,
+      "averageColor": [
+        0.7654,
+        0.6118,
+        0.4628
+      ],
+      "albedoHeight": "rock_pitted_mossy/albedo-height.png",
+      "slopeRough": "rock_pitted_mossy/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "a6a84d7dd1bf8a9d8f129fdcb2b49b3ae549d2f411e4307685269d6d5fe792f2",
+        "slopeRough": "e176ca5583c2d49e77dddb172e34b60855ce6837a89857cb8e2121e427ad2968"
+      },
+      "source": {
+        "id": "rock_pitted_mossy",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "03b18a8408cda2cd99c08da2b567c6ce",
+          "nor_dx": "7cfa3b5e10609b4047ddb4e7e7a7496b",
+          "Displacement": "62dfef49f098bdd148a022bf8f524060",
+          "Rough": "2ea5c41d5f89e77ff8b295922610e53f",
+          "AO": "42ede5111003de83c584a22bdb289770"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "lichen_rock",
+      "name": "Lichen Rock",
+      "biome": "tundra",
+      "role": "lichen",
+      "tileMeters": 2,
+      "projection": "planar",
+      "normalStrength": 0.9,
+      "roughness": 0.9,
+      "specular": 0.02,
+      "slopeScale": 1.5,
+      "averageColor": [
+        0.266,
+        0.2217,
+        0.1792
+      ],
+      "albedoHeight": "lichen_rock/albedo-height.png",
+      "slopeRough": "lichen_rock/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "bd933c883283c0f13c25af7f3d3bef3c8239db401e1c45334c3801584d4e915b",
+        "slopeRough": "f363d17c97c460e497f821f7112a478806d035fb1604434b6342bf2ae8260720"
+      },
+      "source": {
+        "id": "lichen_rock",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "453cc496091c1be83d0151249c97cecd",
+          "nor_dx": "8f7d844d00bb5b6ace952b60aa4751b8",
+          "Displacement": "a3d94ed1381ae64a45005601c1d3048c",
+          "Rough": "29bc56b1e789e65d7fa821d31b775f4b",
+          "AO": "36a39151f6a7fcb5c74806707725432f"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "gravelly_sand",
+      "name": "Gravelly Sand",
+      "biome": "alpine",
+      "role": "scree",
+      "tileMeters": 2.48,
+      "projection": "planar",
+      "normalStrength": 1,
+      "roughness": 0.95,
+      "specular": 0.02,
+      "slopeScale": 1,
+      "averageColor": [
+        0.5717,
+        0.4336,
+        0.2986
+      ],
+      "albedoHeight": "gravelly_sand/albedo-height.png",
+      "slopeRough": "gravelly_sand/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "5a2bd3cfb330b2045d4c54731fc953530668628f1dcc42fff60d2c4d18f00d5e",
+        "slopeRough": "56b32b5745a0b173c6384861fc772a02631adb3c95643214ff310fb6b511921e"
+      },
+      "source": {
+        "id": "gravelly_sand",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "16b7593a26ce1bd43f1d95e61dc25f05",
+          "nor_dx": "f7e7668e2dcd1f18683ef261860ee20b",
+          "Displacement": "68bff5c2b245c76ce54f3944a0c258ea",
+          "Rough": "1152ab34b85ec42a5d4d6c8ed2c1100b",
+          "AO": "a3195bcae294f918ed2e2c0975cd6a2d"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "aerial_grass_rock",
+      "name": "Aerial Grass Rock",
+      "biome": "alpine",
+      "role": "alpine-grass-macro",
+      "tileMeters": 15,
+      "projection": "planar",
+      "normalStrength": 0.55,
+      "roughness": 0.92,
+      "specular": 0.02,
+      "slopeScale": 0.5,
+      "averageColor": [
+        0.4462,
+        0.3812,
+        0.1432
+      ],
+      "albedoHeight": "aerial_grass_rock/albedo-height.png",
+      "slopeRough": "aerial_grass_rock/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "fe4fd3a87997b69693e379e1f1abf1e4192a5057398897a71d03ea519be88fd5",
+        "slopeRough": "c708313efb9488799efa9460536dbeca6e59485c8874c9a5145a61d98cd1d8ad"
+      },
+      "source": {
+        "id": "aerial_grass_rock",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "e920ce36afd0abff000b8366d3d768d3",
+          "nor_dx": "4c2090a059403875c417e5413e52d381",
+          "Displacement": "1c94b490268e4fca333e3d8d4afac033",
+          "Rough": "f78c5cdc565f990299ae7c5a81f68cf7",
+          "AO": "7d1ce90239859414aa607b0bd99e8262"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "leafy_grass",
+      "name": "Leafy Grass",
+      "biome": "temperate",
+      "role": "grass",
+      "tileMeters": 2,
+      "projection": "planar",
+      "normalStrength": 0.8,
+      "roughness": 0.9,
+      "specular": 0.03,
+      "slopeScale": 1,
+      "averageColor": [
+        0.5922,
+        0.5151,
+        0.3495
+      ],
+      "albedoHeight": "leafy_grass/albedo-height.png",
+      "slopeRough": "leafy_grass/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "4991e9270022aea816c92ce0769487a16aa0a6dbe65bbeb81bdfe3510bf5117a",
+        "slopeRough": "ed21bed13d759bc7fe595cef165a6c62416ed52878e3b2104333d6fa7d990967"
+      },
+      "source": {
+        "id": "leafy_grass",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "0dbc071e91d6905edfcfbe8eb785a1ab",
+          "nor_dx": "d59f986ee6697c9ea928da331c1b0891",
+          "Displacement": "df6cb89fb7072d00f2de804bf9e4584d",
+          "Rough": "05f6bb1383e12b327727d313c5899cf2",
+          "AO": "c9d0077eefe28c5b18cf2fe78e945abb"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "sparse_grass",
+      "name": "Sparse Grass",
+      "biome": "alpine",
+      "role": "alpine-grass",
+      "tileMeters": 2,
+      "projection": "planar",
+      "normalStrength": 0.8,
+      "roughness": 0.9,
+      "specular": 0.025,
+      "slopeScale": 1,
+      "averageColor": [
+        0.3114,
+        0.2408,
+        0.0831
+      ],
+      "albedoHeight": "sparse_grass/albedo-height.png",
+      "slopeRough": "sparse_grass/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "18378d40afe7a38733a61274301e83850c882a4a04ea1bfdb851d830201ce3ec",
+        "slopeRough": "47e6dbd0c1a304452b04927c2feee528a1757811ee80c915b93d77a0a3f51215"
+      },
+      "source": {
+        "id": "sparse_grass",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "5d0aba796e1b5882555161c16b10ee9d",
+          "nor_dx": "6d46e58a63e593210c91af626515e8bf",
+          "Displacement": "6efc347cdcc87ae206bf691ff082a009",
+          "Rough": "acf2fd7e352e7635f67f24ecda01e485",
+          "AO": "221657faefdb254cbcf6fc819b3b2c1d"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "forest_ground_04",
+      "name": "Forest Ground 04",
+      "biome": "boreal",
+      "role": "forest-floor",
+      "tileMeters": 3.15,
+      "projection": "planar",
+      "normalStrength": 0.9,
+      "roughness": 0.92,
+      "specular": 0.02,
+      "slopeScale": 1,
+      "averageColor": [
+        0.4168,
+        0.3521,
+        0.2654
+      ],
+      "albedoHeight": "forest_ground_04/albedo-height.png",
+      "slopeRough": "forest_ground_04/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "3899c5a1c2f10d12976e86e03d6a9ee744b2f5e42dd55e27b39c4a94b0dfe4ae",
+        "slopeRough": "96a3d899b722727a5e5cc4c60921ee6278eccf8cf7f3ca5207b6f15345b1c826"
+      },
+      "source": {
+        "id": "forest_ground_04",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "6ad9df4d731a238299806f739a26af83",
+          "nor_dx": "c6b4962593e905353e66937ad392a4ca",
+          "Displacement": "bc4bc69e809d50f2a662f5a48bd2a2aa",
+          "Rough": "b5c7ba5c16f00261e9a765d52cf7e0ac",
+          "AO": "289bfcedb4676de2632c678a35eeea63"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "brown_mud_leaves_01",
+      "name": "Brown Mud Leaves 01",
+      "biome": "boreal",
+      "role": "leaf-litter",
+      "tileMeters": 1.3,
+      "projection": "planar",
+      "normalStrength": 0.9,
+      "roughness": 0.9,
+      "specular": 0.02,
+      "slopeScale": 1.5,
+      "averageColor": [
+        0.3954,
+        0.329,
+        0.2006
+      ],
+      "albedoHeight": "brown_mud_leaves_01/albedo-height.png",
+      "slopeRough": "brown_mud_leaves_01/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "0a272d38abac214fd1170e5e16d78f88ab98c7bdb16952cac2d0aa506e378301",
+        "slopeRough": "7daccaebfd2181c6157ba985f46cf1580facf609fe30cf6d7e1a0368bed935e0"
+      },
+      "source": {
+        "id": "brown_mud_leaves_01",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "5340848384f9bb19bfa6e7ac459683d7",
+          "nor_dx": "6f1e029956e04aa20c573af338dfe877",
+          "Displacement": "ce1ebb8969b0c705fc997f8a62707160",
+          "Rough": "3896f151d1b1de421a61c3c5d9a742b0",
+          "AO": "f9195054f2368febc0358bfabaf12148"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "mossy_rock",
+      "name": "Mossy Rock",
+      "biome": "boreal",
+      "role": "mossy-rock",
+      "tileMeters": 3,
+      "projection": "triplanar",
+      "normalStrength": 1,
+      "roughness": 0.88,
+      "specular": 0.03,
+      "slopeScale": 1,
+      "averageColor": [
+        0.4251,
+        0.4181,
+        0.34
+      ],
+      "albedoHeight": "mossy_rock/albedo-height.png",
+      "slopeRough": "mossy_rock/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "354865d5d54bb0d9c881784555c721a4235b53fb301e49f36957483e01172802",
+        "slopeRough": "18a4adc6461393a135229ed7ebb0e15c90f84004b2caaa191958f3bea335e31e"
+      },
+      "source": {
+        "id": "mossy_rock",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "a57fbbf55269eb64f8d40708fe3af26c",
+          "nor_dx": "e0c832b4ff13c876142241ef934451f2",
+          "Displacement": "3c07ecfc79abd1591c57e29e2e68fcb0",
+          "Rough": "7eadb38815ad2569104d827ad8ac1572",
+          "AO": "3f9fe340bcb5d2b6848b04959e2c68fb"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "forest_leaves_02",
+      "name": "Forest Leaves 02",
+      "biome": "tropical",
+      "role": "tropical-litter",
+      "tileMeters": 3,
+      "projection": "planar",
+      "normalStrength": 0.9,
+      "roughness": 0.9,
+      "specular": 0.02,
+      "slopeScale": 1.5,
+      "averageColor": [
+        0.5569,
+        0.4404,
+        0.2289
+      ],
+      "albedoHeight": "forest_leaves_02/albedo-height.png",
+      "slopeRough": "forest_leaves_02/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "a3aba3ef86d877566ca2173448bdfae238f8b7c7a0b0420b701327bdca364d1e",
+        "slopeRough": "72c2259268373d62322844bc8141a08e1c88c4796d2c0d8abe213d2b7b83305b"
+      },
+      "source": {
+        "id": "forest_leaves_02",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "13e9bfac07cb72ca143e153cc2f589a8",
+          "nor_dx": "3085911d701a468afa5022f5babca248",
+          "Displacement": "37d65a79d38f307d09ab2a20e5d4d6b1",
+          "Rough": "578e637510d8fdd7acf97afc6f329e9d",
+          "AO": "77ec29d72658d790f5e6099dbf2917a9"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "red_laterite_soil_stones",
+      "name": "Red Laterite Soil Stones",
+      "biome": "tropical",
+      "role": "laterite",
+      "tileMeters": 2,
+      "projection": "planar",
+      "normalStrength": 0.95,
+      "roughness": 0.92,
+      "specular": 0.02,
+      "slopeScale": 1,
+      "averageColor": [
+        0.3956,
+        0.2443,
+        0.1815
+      ],
+      "albedoHeight": "red_laterite_soil_stones/albedo-height.png",
+      "slopeRough": "red_laterite_soil_stones/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "331fe5fdf701154b855ab272c4d78ebcb7336e53d48af370a248868d2dd0fd08",
+        "slopeRough": "4e9295bfe9b39eca5de386ac78d12da54426e21814ddd49ee6b0217e8ee2d304"
+      },
+      "source": {
+        "id": "red_laterite_soil_stones",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "f5d483e42da0c704f320b8c159ebca5e",
+          "nor_dx": "56bbd1238422956492bcf51d1a0bdc6f",
+          "Displacement": "55fef21f42937458813f8d7e5d2362b5",
+          "Rough": "564a0faa8182a6cdb0fcff8e357dc064",
+          "AO": "85db085c6d7ec0d4a3247a55ecfa9f9b"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "brown_mud_03",
+      "name": "Brown Mud 03",
+      "biome": "wetland",
+      "role": "mud",
+      "tileMeters": 1.3,
+      "projection": "planar",
+      "normalStrength": 0.85,
+      "roughness": 0.85,
+      "specular": 0.035,
+      "slopeScale": 2,
+      "averageColor": [
+        0.3251,
+        0.2882,
+        0.2317
+      ],
+      "albedoHeight": "brown_mud_03/albedo-height.png",
+      "slopeRough": "brown_mud_03/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "207aa3095636000f2d851b99cf82e242772a1e46c4cfa18d6b5d7e01eaa03433",
+        "slopeRough": "fdfb6404059f327c68bb0db73b896b2daaa2deb15f23fb22bbca7e3bfff49c52"
+      },
+      "source": {
+        "id": "brown_mud_03",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "b99d14c26debf660457b9497f2facec6",
+          "nor_dx": "f60ce661e3804737bdef8ec2e3796910",
+          "Displacement": "146b50bd9b58cca11ec763d6ddc3b98a",
+          "Rough": "856d543a9dc18df23cf1239a54025411",
+          "AO": "fee26e265eb4e53bac622fcec7d64594"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "sand_01",
+      "name": "Sand 01",
+      "biome": "arid",
+      "role": "sand",
+      "tileMeters": 1.5,
+      "projection": "planar",
+      "normalStrength": 0.85,
+      "roughness": 0.92,
+      "specular": 0.025,
+      "slopeScale": 1.5,
+      "averageColor": [
+        0.6479,
+        0.5856,
+        0.4356
+      ],
+      "albedoHeight": "sand_01/albedo-height.png",
+      "slopeRough": "sand_01/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "3e4e23264f81b8a8865d596d958d2b2453856fd5845539f20792210f1f9b0ffd",
+        "slopeRough": "548a6f472a3fef75cd0295279d2027747fe629f274f344da80b878c7f3369c20"
+      },
+      "source": {
+        "id": "sand_01",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "c914c8edb419f040e04224081a3f79a5",
+          "nor_dx": "64dc964c76661901556b277c61b8ae04",
+          "Displacement": "53f6887f6d9c9dc7a8a46f26f67046a1",
+          "Rough": "663d0ddf782a427b7da4e247c939e73b",
+          "AO": "f96003eee1c68627545d5bc5a34c5390"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "aerial_beach_01",
+      "name": "Aerial Beach 01",
+      "biome": "arid",
+      "role": "sand-macro",
+      "tileMeters": 30,
+      "projection": "planar",
+      "normalStrength": 0.5,
+      "roughness": 0.94,
+      "specular": 0.02,
+      "slopeScale": 1,
+      "averageColor": [
+        0.5679,
+        0.5239,
+        0.4796
+      ],
+      "albedoHeight": "aerial_beach_01/albedo-height.png",
+      "slopeRough": "aerial_beach_01/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "45b12682d78fc13c314814636aa3cad2ec89427aaa1b8057a9e5ee70e0b93152",
+        "slopeRough": "485a549e7b01c7f7f7ca2f349641eb4bbc345f3b8fab7bb81f55c65d49398744"
+      },
+      "source": {
+        "id": "aerial_beach_01",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "0ec8483b18d960f2152dae2a64806b3d",
+          "nor_dx": "940f4e99c5edfacab2725c7c79756b3e",
+          "Displacement": "e18f221c80180cb587fe79c6f5590321",
+          "Rough": "de38ac4f204371566b06c806236d656c",
+          "AO": "a48eec1b538bb80021ae8e168be47f58"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "dry_ground_rocks",
+      "name": "Dry Ground Rocks",
+      "biome": "arid",
+      "role": "arid-ground",
+      "tileMeters": 4,
+      "projection": "planar",
+      "normalStrength": 0.95,
+      "roughness": 0.94,
+      "specular": 0.02,
+      "slopeScale": 1,
+      "averageColor": [
+        0.583,
+        0.4525,
+        0.3066
+      ],
+      "albedoHeight": "dry_ground_rocks/albedo-height.png",
+      "slopeRough": "dry_ground_rocks/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "eec07191c276cef8e92380e125484fac93c1667f556929de171f151e92effabd",
+        "slopeRough": "49ea2be259cff11d5e22934fa1abe2ae77b12d4cff0ef5803bb8172814727820"
+      },
+      "source": {
+        "id": "dry_ground_rocks",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "7cc10e3eb12ce7bb8235d3e3c3041ded",
+          "nor_dx": "26a6159450557e8c75aa1e5a73e5c4c3",
+          "Displacement": "1259830e86af3896a2222579df1df9a6",
+          "Rough": "0f5d1be1483fc6ccd5971a724b178129",
+          "AO": "efc4f14532d2d991e7c587d8b5aa3122"
+        }
+      },
+      "packSize": 512
+    },
+    {
+      "id": "sandstone_cracks",
+      "name": "Sandstone Cracks",
+      "biome": "arid",
+      "role": "cracked-earth",
+      "tileMeters": 2,
+      "projection": "planar",
+      "normalStrength": 0.95,
+      "roughness": 0.93,
+      "specular": 0.02,
+      "slopeScale": 1,
+      "averageColor": [
+        0.82,
+        0.6309,
+        0.4532
+      ],
+      "albedoHeight": "sandstone_cracks/albedo-height.png",
+      "slopeRough": "sandstone_cracks/slope-rough.png",
+      "hashes": {
+        "albedoHeight": "8eb95f06a4397d50bab0c4c47a5cc45dcaad64dd892aa3b06dae10872b72fb65",
+        "slopeRough": "ca8787f7dbd563f8242aa1c489aec5a0c2a0a47fe12b2d7f27eb430a3219f93d"
+      },
+      "source": {
+        "id": "sandstone_cracks",
+        "resolution": "1k",
+        "maps": {
+          "albedo": "Diffuse",
+          "normal": "nor_dx",
+          "height": "Displacement",
+          "roughness": "Rough",
+          "ao": "AO"
+        },
+        "hashes": {
+          "Diffuse": "94619de4f4d33ad9fe6711d3ad88ec4a",
+          "nor_dx": "035b21e49f3be6bd43e8aa184c04b256",
+          "Displacement": "cfd90a952ba666e01817243f5e01b77e",
+          "Rough": "800ad67a79fb6f976b9aeba32d197260",
+          "AO": "a4d643e24da5e15d2be3e58272d8d081"
+        }
+      },
+      "packSize": 512
+    }
+  ]
+}

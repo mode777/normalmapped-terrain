@@ -10,7 +10,7 @@
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { bakeDem } from './dem/bake.ts';
+import { bakeDem, bakeDemMaterials, checkMaterialBake } from './dem/bake.ts';
 import { validateDataset } from './dem/validate.ts';
 import type { DemConfig } from './dem/types.ts';
 
@@ -36,6 +36,20 @@ if (process.argv.includes('--check')) {
   console.log(
     `dataset OK: ${summary.tileCount} tiles, normal ${summary.normalTileSize}px, `
     + `max seam ${summary.maxSeamError}, rebaked ${summary.rebuiltNormals} normals`,
+  );
+} else if (process.argv.includes('--check-materials')) {
+  const summary = checkMaterialBake(config);
+  console.log(
+    `material rebake OK: ${summary.block.stack.size}px stack, `
+    + `${summary.block.macroSize}px macro, hashes match`,
+  );
+} else if (process.argv.includes('--materials-only')) {
+  console.log(`Baking materials for ${config.dataset} -> ${config.outputDir}`);
+  const summary = bakeDemMaterials(config);
+  console.log(
+    `material stack OK: ${summary.block.stack.size}px stack, ${summary.block.macroSize}px macro, `
+    + `weights mean ${summary.stats.weightMean.map((v) => v.toFixed(3)).join('/')} `
+    + `range ${summary.stats.weightMin.map((v, k) => `${v.toFixed(2)}-${summary.stats.weightMax[k].toFixed(2)}`).join('/')}`,
   );
 } else {
   console.log(`Baking ${config.dataset} -> ${config.outputDir}`);

@@ -8,6 +8,8 @@
     "tools/test-infinite.ts",
     "tools/bake-detail-normal.ts",
     "tools/detail/**/*.ts",
+    "tools/fetch-materials.ts",
+    "tools/test-materials.ts",
     "tools/analyze-infinite.ts",
     "tools/analyze-dem.ts",
     "tools/test-dem.ts",

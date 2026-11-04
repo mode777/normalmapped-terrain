@@ -7,6 +7,7 @@
  * reconstructed heights.
  */
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
@@ -16,6 +17,7 @@ import {
   decodeUint16,
   tileRangeForLevel,
 } from './grid.ts';
+import { loadMaterialLibrary, materialIndex } from './material-stack.ts';
 
 export interface ValidationSummary {
   outputDir: string;
@@ -23,6 +25,10 @@ export interface ValidationSummary {
   normalTileSize: number;
   maxSeamError: number;
   rebuiltNormals: number;
+  materialStackSize?: number;
+  materialMacroSize?: number;
+  materialWeightMean?: [number, number, number, number];
+  materialWeightRange?: Array<[number, number]>;
 }
 
 function readJson<T>(path: string): T {
@@ -31,6 +37,111 @@ function readJson<T>(path: string): T {
 
 function rangeKey(r: TileRange): string {
   return `${r.level}:${r.minTx}:${r.maxTx}:${r.minTy}:${r.maxTy}:${r.count}`;
+}
+
+function sha256File(path: string): string {
+  return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+function readRgba(path: string, size: number, label: string): Buffer {
+  if (!existsSync(path)) throw new Error(`missing ${label}: ${path}`);
+  const png = PNG.sync.read(readFileSync(path));
+  if (png.width !== size || png.height !== size) {
+    throw new Error(`wrong ${label} size: ${path} (${png.width}x${png.height}, expected ${size})`);
+  }
+  if (png.data.length !== size * size * 4) {
+    throw new Error(`wrong ${label} channels: ${path} (${png.data.length} bytes)`);
+  }
+  return png.data;
+}
+
+function validateMaterials(
+  manifest: Manifest,
+  outputDir: string,
+): {
+  materialStackSize: number;
+  materialMacroSize: number;
+  materialWeightMean: [number, number, number, number];
+  materialWeightRange: Array<[number, number]>;
+} {
+  const block = manifest.materials;
+  if (!block) throw new Error('missing materials block');
+  if (block.slots.length !== 4) throw new Error('material slots must contain four IDs');
+  if (block.stack.extent !== manifest.localFrame.sizeMeters) {
+    throw new Error(
+      `material stack extent ${block.stack.extent} != local frame ${manifest.localFrame.sizeMeters}`,
+    );
+  }
+  const publicRoot = join(outputDir, '..', '..');
+  const libraryPath = join(publicRoot, block.library);
+  const library = loadMaterialLibrary(libraryPath);
+  if (new Set(block.slots).size !== 4) throw new Error('material slots are not unique');
+  const expectedIndices = block.slots.map((id) => materialIndex(library, id));
+
+  const idsPath = join(outputDir, block.stack.ids);
+  const weightsPath = join(outputDir, block.stack.weights);
+  const macroPath = join(outputDir, block.macro);
+  const ids = readRgba(idsPath, block.stack.size, 'material IDs');
+  const weights = readRgba(weightsPath, block.stack.size, 'material weights');
+  const macro = readRgba(macroPath, block.macroSize, 'macro albedo');
+
+  if (!block.hashes || !block.hashes.ids || !block.hashes.weights || !block.hashes.macro) {
+    throw new Error('material hashes are missing');
+  }
+  if (sha256File(idsPath) !== block.hashes.ids) throw new Error('material IDs hash mismatch');
+  if (sha256File(weightsPath) !== block.hashes.weights) throw new Error('material weights hash mismatch');
+  if (sha256File(macroPath) !== block.hashes.macro) throw new Error('macro albedo hash mismatch');
+
+  const weightSums: [number, number, number, number] = [0, 0, 0, 0];
+  const weightMin: [number, number, number, number] = [Infinity, Infinity, Infinity, Infinity];
+  const weightMax: [number, number, number, number] = [-Infinity, -Infinity, -Infinity, -Infinity];
+  const pixelCount = block.stack.size * block.stack.size;
+  for (let i = 0; i < ids.length; i += 4) {
+    for (let k = 0; k < 4; k++) {
+      const id = ids[i + k] ?? 0;
+      if (id >= library.materials.length) {
+        throw new Error(`material ID ${id} at texel ${i / 4} is outside the library`);
+      }
+      if (id !== expectedIndices[k]) {
+        throw new Error(`material slot ${k} uses ID ${id}, expected ${expectedIndices[k]}`);
+      }
+      const weight = (weights[i + k] ?? 0) / 255;
+      weightSums[k] += weight;
+      if (weight < weightMin[k]) weightMin[k] = weight;
+      if (weight > weightMax[k]) weightMax[k] = weight;
+    }
+    const sum = (weights[i] ?? 0) + (weights[i + 1] ?? 0)
+      + (weights[i + 2] ?? 0) + (weights[i + 3] ?? 0);
+    if (sum < 254 || sum > 256) {
+      throw new Error(`material weights at texel ${i / 4} sum to ${sum}, expected 255`);
+    }
+  }
+  for (let k = 0; k < 4; k++) {
+    if (weightMax[k] <= 0.001) throw new Error(`material slot ${k} is always zero`);
+    if (weightMax[k] - weightMin[k] < 0.01) {
+      throw new Error(`material slot ${k} has a degenerate range ${weightMin[k]}..${weightMax[k]}`);
+    }
+  }
+  for (let i = 3; i < macro.length; i += 4) {
+    if (macro[i] !== 255) throw new Error(`macro albedo alpha at texel ${(i - 3) / 4} is not opaque`);
+  }
+
+  return {
+    materialStackSize: block.stack.size,
+    materialMacroSize: block.macroSize,
+    materialWeightMean: [
+      weightSums[0] / pixelCount,
+      weightSums[1] / pixelCount,
+      weightSums[2] / pixelCount,
+      weightSums[3] / pixelCount,
+    ],
+    materialWeightRange: [
+      [weightMin[0], weightMax[0]],
+      [weightMin[1], weightMax[1]],
+      [weightMin[2], weightMax[2]],
+      [weightMin[3], weightMax[3]],
+    ],
+  };
 }
 
 export function validateDataset(outputDir: string): ValidationSummary {
@@ -181,6 +292,8 @@ export function validateDataset(outputDir: string): ValidationSummary {
   const previewPath = join(outputDir, manifest.paths.preview);
   if (!existsSync(previewPath)) throw new Error(`missing preview: ${previewPath}`);
 
+  const materialSummary = manifest.materials ? validateMaterials(manifest, outputDir) : null;
+
   // Deterministic boundary rebake sample: one interior and one edge tile per
   // level, from the reconstructed L0 grid.
   const demGrid: DemGrid = { data: l0Grid, cols, rows, spacing: baseSpacing };
@@ -220,5 +333,6 @@ export function validateDataset(outputDir: string): ValidationSummary {
     normalTileSize,
     maxSeamError: manifest.seamReport.maxError,
     rebuiltNormals,
+    ...(materialSummary ?? {}),
   };
 }

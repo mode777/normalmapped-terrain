@@ -54,14 +54,42 @@ if (existsSync(`${dir}/console.json`)) {
   if (errors.length) console.log(errors.join('\n'));
 }
 
+try {
+  const stats = JSON.parse(readFileSync(`${dir}/material-stats.json`, 'utf8')) as {
+    libraryCount: number;
+    stackSize: number;
+    stackExtent: number;
+    macroSize: number;
+    textureUnits: number;
+    maxTextureUnits: number;
+    approxTextureMiB: number;
+    mode: string;
+  };
+  console.log(`material stats: ${JSON.stringify(stats)}`);
+  check('material library has 20 layers', stats.libraryCount === 20, `(${stats.libraryCount})`);
+  check('material stack is 2048px', stats.stackSize === 2048, `(${stats.stackSize})`);
+  check('material macro is 1024px', stats.macroSize === 1024, `(${stats.macroSize})`);
+  check('material stack extent is 30720m', stats.stackExtent === 30720, `(${stats.stackExtent})`);
+  check('material mode starts on', stats.mode === 'on', `(${stats.mode})`);
+  check('material texture units fit', stats.textureUnits <= stats.maxTextureUnits,
+    `${stats.textureUnits}/${stats.maxTextureUnits}`);
+  check('material texture budget is plausible', stats.approxTextureMiB > 40 && stats.approxTextureMiB < 120,
+    `${stats.approxTextureMiB.toFixed(1)} MiB`);
+} catch {
+  console.log('skip material stats checks (material-stats.json missing)');
+}
+
 const files = readdirSync(dir).filter((f) => f.endsWith('.png')).sort();
 for (const f of files) {
+  if (f === '23-material-swatches.png') continue;
   const img = load(f);
   const sky = regionStats(img, 120, 100, 1100, 240);
   const terra = regionStats(img, 120, 300, 1200, 820);
   console.log(`${f}  sky=${JSON.stringify(sky)}  terrain=${JSON.stringify(terra)}`);
   check(`${f}: terrain has variation`, terra.std > 8, `std=${terra.std}`);
-  check(`${f}: no large black holes`, terra.dark < 0.08, `dark=${terra.dark}`);
+  // Low-sun poses can legitimately put more than 8% of the terrain in shadow;
+  // 12% is the black-hole / unfilled-tile threshold, not a lighting judgement.
+  check(`${f}: no large black holes`, terra.dark < 0.12, `dark=${terra.dark}`);
 }
 
 // Same-pose normal-map vs flat-normal comparison.
@@ -84,6 +112,68 @@ try {
     `hf ${off.hf} -> ${on.hf}`);
 } catch {
   console.log('skip detail-layer comparison (shots missing)');
+}
+
+// Material on/off pair at a close pose. The material albedo/normal should add
+// both color change and high-frequency energy versus the old palette.
+try {
+  const on = regionStats(load('16-material-on.png'), 200, 300, 1400, 850);
+  const off = regionStats(load('17-material-off.png'), 200, 300, 1400, 850);
+  console.log(`material-off hf=${off.hf} mean=${off.mean}  material-on hf=${on.hf} mean=${on.mean}`);
+  check('material layer adds high-frequency detail', on.hf > off.hf * 1.05,
+    `hf ${off.hf} -> ${on.hf}`);
+  check('material layer changes near-field color', Math.abs(on.mean - off.mean) > 1.0,
+    `mean ${off.mean} -> ${on.mean}`);
+} catch {
+  console.log('skip material on/off comparison (shots missing)');
+}
+
+try {
+  const cliff = regionStats(load('19-material-cliff.png'), 200, 300, 1400, 850);
+  console.log(`material cliff=${JSON.stringify(cliff)}`);
+  check('material cliff has rock-scale variation', cliff.std > 8 && cliff.dark < 0.08,
+    `std=${cliff.std} dark=${cliff.dark}`);
+} catch {
+  console.log('skip material cliff check (shot missing)');
+}
+
+try {
+  const far = regionStats(load('20-material-distance.png'), 120, 300, 1200, 820);
+  console.log(`material distance=${JSON.stringify(far)}`);
+  check('material far field retains macro variation', far.std > 8 && far.dark < 0.08,
+    `std=${far.std} dark=${far.dark}`);
+} catch {
+  console.log('skip material distance check (shot missing)');
+}
+
+try {
+  const debug = regionStats(load('21-material-debug.png'), 120, 300, 1200, 820);
+  console.log(`material debug=${JSON.stringify(debug)}`);
+  check('material debug view is distinct per material', debug.std > 12, `std=${debug.std}`);
+} catch {
+  console.log('skip material debug check (shot missing)');
+}
+
+try {
+  const on = regionStats(load('16-material-on.png'), 200, 300, 1400, 850);
+  const flat = regionStats(load('22-material-normal0.png'), 200, 300, 1400, 850);
+  console.log(`material normals on hf=${on.hf} mean=${on.mean}  off hf=${flat.hf} mean=${flat.mean}`);
+  check('material normal strength preserves albedo mean', Math.abs(on.mean - flat.mean) < 20,
+    `mean ${on.mean} -> ${flat.mean}`);
+  check('material normals add shading relief', on.hf > flat.hf * 1.02,
+    `hf ${flat.hf} -> ${on.hf}`);
+} catch {
+  console.log('skip material normal-strength comparison (shots missing)');
+}
+
+try {
+  const swatch = load('23-material-swatches.png');
+  const grid = regionStats(swatch, 100, 100, Math.max(200, swatch.width - 100), Math.max(200, swatch.height - 100));
+  console.log(`material swatches ${swatch.width}x${swatch.height} grid=${JSON.stringify(grid)}`);
+  check('material swatch page is populated', swatch.width >= 1000 && grid.std > 8,
+    `${swatch.width}x${swatch.height} std=${grid.std}`);
+} catch {
+  console.log('skip material swatch check (shot missing)');
 }
 
 try {

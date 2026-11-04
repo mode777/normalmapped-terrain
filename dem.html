@@ -83,6 +83,20 @@
         <p class="info">mesh 10 m · normal map 5 m (2×)</p>
       </section>
 
+      <section>
+        <h3>Materials</h3>
+        <label class="select-row">Mode
+          <select id="material-mode">
+            <option value="on">On</option>
+            <option value="off">Off</option>
+            <option value="debug">Debug</option>
+          </select>
+        </label>
+        <label class="slider-row">Height blend <input type="range" id="height-blend" min="0" max="0.6" value="0.25" step="0.05" /><span id="height-blend-val">0.25×</span></label>
+        <label class="slider-row">Material normals <input type="range" id="material-normal-strength" min="0" max="2" value="1" step="0.05" /><span id="material-normal-strength-val">1.00×</span></label>
+        <p class="info">20 materials · baked 4-slot stack · 2048²</p>
+      </section>
+
       <section class="credits">
         <p>Kartverket Nasjonal høydemodell DTM 10, 30.72 × 30.72 km around Jotunheimen. Heights and normals are baked offline into a 5×5-tile toroidal cache per LOD so the biased finer normal layer covers each coarse ring.</p>
         <p class="attribution">© Kartverket, Nasjonal høydemodell DTM 10, CC BY 4.0, modified (resampled, tiled, normals derived).</p>

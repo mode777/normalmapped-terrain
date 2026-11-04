@@ -37,6 +37,9 @@ jobs:
       - name: Validate DEM dataset
         run: npm run test:dem
 
+      - name: Validate material library
+        run: npm run test:materials
+
       - name: Build site
         run: npm run build
 

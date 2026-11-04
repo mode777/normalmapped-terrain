@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "dataset": "jotunheimen",
   "bakeVersion": 1,
   "source": {
@@ -110,5 +110,31 @@
     "file": "seam-report.json",
     "threshold": 2,
     "maxError": 1
+  },
+  "materials": {
+    "library": "materials/manifest.json",
+    "slots": [
+      "rock_face_03",
+      "gravelly_sand",
+      "snow_02",
+      "sparse_grass"
+    ],
+    "stack": {
+      "ids": "stack-ids.png",
+      "weights": "stack-weights.png",
+      "size": 2048,
+      "extent": 30720,
+      "encoding": "rgba8-ids-weights"
+    },
+    "macro": "macro-albedo.png",
+    "macroSize": 1024,
+    "macroEncoding": "rgba8",
+    "bakeVersion": 1,
+    "seed": 20260217,
+    "hashes": {
+      "ids": "10da2372017db485ae1a96f8197d4773326fdb0fb3b96cc6921b77c12f5171e9",
+      "weights": "ccf22377987e66b418562b0ee04b1dc521cd5b96d949ab3a9699ebdde95fa9bd",
+      "macro": "cd5e11bcb9291e52c319b14cab163d9f84db4dbc0c684c333fe952015936c5a2"
+    }
   }
 }
