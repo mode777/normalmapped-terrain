@@ -91,7 +91,7 @@ const state: AppState = {
   materialMode: 'on',
   heightBlend: 0.25,
   materialNormalStrength: 1,
-  materialScale: 8,
+  materialScale: 32,
   wireframe: false,
   lodDebug: false,
   autoCruise: true,

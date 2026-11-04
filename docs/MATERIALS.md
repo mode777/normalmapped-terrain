@@ -18,8 +18,8 @@ changes.
 - **Layers:** two `DataArrayTexture`s, one layer per material, with mips and
   anisotropy. Albedo is sampled as sRGB; slope/rough/ao is linear.
 - **Physical scale:** `tileMeters` is Poly Haven's `dimensions / 1000`. The
-  renderer applies a global `textureScale` multiplier to it (default **8×**,
-  panel slider 1–32×), so the packed textures read at a larger world scale
+  renderer applies a global `textureScale` multiplier to it (default **32×**,
+  panel slider 1–64×), so the packed textures read at a larger world scale
   without re-packing. The shader divides by `tileMeters * textureScale`; the
   world-lock offset uses the same scaled tile.
 - **Slope encoding:** the shader decodes `s = (rg * 2 - 1) * slopeScale`; the
@@ -29,9 +29,9 @@ changes.
   `.cache/materials/`.
 
 The 20 materials cover arctic/alpine, tundra, boreal/temperate, tropical and
-arid roles. The first Jotunheimen stack uses four of them:
-`rock_face_03` (cliff rock, triplanar), `gravelly_sand` (scree),
-`snow_02` (snow) and `sparse_grass` (alpine grass).
+arid roles. The first Jotunheimen stack uses four of them: `rocky_terrain_02`
+(low-steepness base), `rock_face_03` (steep cliff, triplanar), `snow_02`
+(snow) and `aerial_grass_rock` (seeded random patches).
 
 ## Distribution stack
 
@@ -45,8 +45,8 @@ macro-albedo.png   1024^2 RGBA8   low-frequency far-field albedo
 
 - **Extent:** 30,720 m, centred on the DEM local frame (15 m/texel for the
   stack, 30 m/texel for the macro).
-- **IDs:** constant for this slice: library indices `2, 6, 0, 9` for
-  rock/scree/snow/grass. A future multi-palette bake can vary them.
+- **IDs:** constant for this slice: library indices `3, 2, 0, 7` for
+  rocky/cliff/snow/aerial-grass. A future multi-palette bake can vary them.
 - **Weights:** the four bytes sum to 255. The shader normalizes after linear
   filtering and uses only slots above a small threshold.
 - **Row order:** row 0 is north, +z is south; load with `flipY = false`, matching
@@ -59,13 +59,16 @@ The bake derives weights from the 10 m L0 height grid:
 
 - **Snow:** high normalized height (start 0.84, ~2100 m), reduced on steep
   slopes, boosted on north-facing slopes (`-N.z`).
-- **Scree:** moderate/steep slopes below the snow line, broken up by band noise.
-- **Grass:** low, gentle, concave ground.
-- **Rock:** the implicit remainder, so steep cliffs are rock-dominant.
+- **Grass / Aerial Grass Rock:** low, gentle, concave ground plus seeded
+  ~4.2 km random patches over the low-steepness rocky areas.
+- **Rocky Terrain 02:** the low/moderate-steepness base.
+- **Rock Face 03:** the steep-face fraction of the rock remainder
+  (`smoothstep(0.30, 0.60, slope)`). It deliberately no longer covers the
+  broad low-slope terrain.
 
 Convexity/concavity from the height-grid Laplacian and seeded low-frequency
 value noise are secondary inputs. The current window's mean weights are
-`0.844 / 0.018 / 0.014 / 0.123` (rock/scree/snow/grass); the stack has
+`0.779 / 0.010 / 0.014 / 0.197` (rocky/cliff/snow/grass); the stack has
 non-degenerate ranges for all four.
 
 ## Shader composition
@@ -164,8 +167,8 @@ Limitations:
   transition-band baking is the next change.
 - The stack is a whole-window 2048² map (~15 m/texel); per-LOD stack tiles are
   deferred until the world grows past ~50 km.
-- Only the rock material is triplanar. Grass, snow and scree stay planar; their
-  cliff stretch is acceptable at the current art scale.
+- Only Rock Face 03 is triplanar. Rocky Terrain 02, snow and the Aerial Grass
+  Rock mix stay planar; their stretch is acceptable at the current art scale.
 - The macro albedo is a baked palette average, not an aerial-texture layer.
 - No real landcover (AR50/N50) is used.
 - Material textures are 512²; the packed library is ~33.5 MiB. A larger library

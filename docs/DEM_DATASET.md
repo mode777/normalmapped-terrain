@@ -77,7 +77,7 @@ Source metadata:
   "attribution": "© Kartverket, Nasjonal høydemodell DTM 10, CC BY 4.0, modified (resampled, tiled, normals derived).",
   "materials": {
     "library": "public/materials/manifest.json",
-    "slots": ["rock_face_03", "gravelly_sand", "snow_02", "sparse_grass"],
+    "slots": ["rocky_terrain_02", "rock_face_03", "snow_02", "aerial_grass_rock"],
     "stackSize": 2048,
     "macroSize": 1024,
     "seed": 20260217
@@ -185,18 +185,20 @@ macro-albedo.png   1024^2 RGBA8   weighted palette average + low-frequency noise
 ```
 
 The first slice uses a fixed four-material palette, in slot order:
-`rock_face_03`, `gravelly_sand`, `snow_02`, `sparse_grass`. The IDs are the
-library indices of those entries; they are constant across the window, so the
-weights cross-fade without an ID-set change.
+`rocky_terrain_02`, `rock_face_03`, `snow_02`, `aerial_grass_rock`. The IDs are
+the library indices of those entries (`3,2,0,7`); they are constant across the
+window, so the weights cross-fade without an ID-set change.
 
 Weights come from the 10 m L0 grid:
 
 - **Snow:** high normalized height, reduced on steep slopes, boosted on
   north-facing slopes (`-N.z`).
-- **Scree:** moderate/steep slopes below the snow line, broken up by band
-  noise.
-- **Grass:** low, gentle, concave ground.
-- **Rock:** the implicit remainder, so steep cliffs are rock-dominant.
+- **Grass / Aerial Grass Rock:** low, gentle, concave ground plus seeded
+  ~4.2 km random patches over the low-steepness rocky areas.
+- **Rocky Terrain 02:** the low/moderate-steepness base.
+- **Rock Face 03:** the steep-face fraction of the rock remainder
+  (`smoothstep(0.30, 0.60, slope)`); it no longer covers the broad low-slope
+  terrain.
 
 The bake also uses convexity/concavity (the Laplacian of the height grid) and
 seeded low-frequency value noise. The macro map is the same blend sampled at
@@ -231,7 +233,7 @@ the checked-in dataset:
 Reference values for the checked-in 2× dataset: 3,080 tiles, 128×128 normal
 tiles, max seam error 1, 18 normal tiles rebaked during validation, a 2048²
 material stack and 1024² macro, stack weight means
-`0.844 / 0.018 / 0.014 / 0.123` (rock/scree/snow/grass), and ~107.5 MB
+`0.779 / 0.010 / 0.014 / 0.197` (rocky/cliff/snow/grass), and ~107.5 MB
 including heights, normals, coarse grid, preview, stack and macro. The packed
 material library is a separate ~33.5 MB under `public/materials/`.
 

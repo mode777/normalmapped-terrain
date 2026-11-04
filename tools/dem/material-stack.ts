@@ -128,9 +128,11 @@ function terrainSample(grid: DemGrid, x: number, z: number, d: number, heightSca
 }
 
 /**
- * Four weights in slot order [rock, scree, snow, grass]. Rock is the implicit
- * base; the overlays are reduced on steep and convex ground, so steepness
- * drives rock/cliff without a separate mask.
+ * Four weights in slot order [rocky, cliff, snow, grass].
+ *
+ * Rocky Terrain 02 is the low-steepness base; Rock Face 03 is the steep-face
+ * fraction. Aerial Grass Rock is used for seeded random patches over the rocky
+ * base to break up large repeating areas.
  */
 export function weightsAt(
   grid: DemGrid,
@@ -145,36 +147,41 @@ export function weightsAt(
   const bandNoise = valueNoise(x / 2600, z / 2600, seed + 1);
   const patchNoise = valueNoise(x / 4200, z / 4200, seed + 2);
 
+  // Rock Face only on genuinely steep faces; rocky terrain owns the rest.
+  const cliffFactor = clamp01(smoothstep(0.30, 0.60, sample.slope));
+
   let snow = smoothstep(SNOW_START, SNOW_START + 0.14, sample.height * 1.06)
     * (1 - 0.7 * smoothstep(0.30, 0.62, sample.slope))
     * (0.55 + 0.45 * sample.north)
     * (0.82 + 0.18 * ridgeNoise);
-  let grass = (1 - smoothstep(0.42, 0.60, sample.height))
+  snow *= 1 - 0.25 * sample.ridge;
+  snow = clamp01(snow);
+
+  const lowGrass = (1 - smoothstep(0.42, 0.60, sample.height))
     * (0.55 + 0.45 * bandNoise)
     * (1 - 0.85 * smoothstep(0.26, 0.55, sample.slope))
-    * (0.65 + 0.35 * sample.concavity);
-  let scree = smoothstep(0.18, 0.42, sample.slope)
-    * (1 - 0.65 * snow)
-    * (0.40 + 0.60 * bandNoise)
-    * (0.75 + 0.25 * patchNoise)
-    * (0.60 + 0.40 * (1 - smoothstep(0.55, 0.85, sample.height)));
-
-  snow *= 1 - 0.25 * sample.ridge;
-  grass *= 1 - 0.45 * sample.ridge;
-  scree *= 1 - 0.10 * sample.ridge;
-
-  snow = clamp01(snow);
+    * (0.65 + 0.35 * sample.concavity)
+    * (1 - 0.45 * sample.ridge);
+  const altitudeGrass = 1 - smoothstep(0.72, 0.90, sample.height);
+  const patch = smoothstep(0.55, 0.82, patchNoise)
+    * 0.45
+    * (1 - cliffFactor)
+    * (1 - snow)
+    * altitudeGrass
+    * (0.80 + 0.20 * bandNoise);
+  let grass = Math.max(lowGrass, patch);
   grass = clamp01(grass);
-  scree = clamp01(scree);
-  const overlays = snow + scree + grass;
-  if (overlays > 0.94) {
-    const k = 0.94 / overlays;
+
+  const overlay = snow + grass;
+  if (overlay > 0.90) {
+    const k = 0.90 / overlay;
     snow *= k;
-    scree *= k;
     grass *= k;
   }
-  const rock = Math.max(0, 1 - snow - scree - grass);
-  return [rock, scree, snow, grass];
+  const rockBase = Math.max(0, 1 - snow - grass);
+  const cliff = rockBase * cliffFactor;
+  const rocky = rockBase * (1 - cliffFactor);
+  return [rocky, cliff, snow, grass];
 }
 
 /** Loads and minimally validates the packed material library manifest. */

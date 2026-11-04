@@ -91,18 +91,20 @@ Poly Haven library and a baked four-slot distribution:
 
 - **20 materials** (24 cap), packed as 512² RGBA8 albedo+height and
   slope+roughness+AO arrays. Physical tile sizes come from Poly Haven's
-  recorded dimensions; the renderer applies an 8× world tile scale by default
-  (panel slider 1–32×).
+  recorded dimensions; the renderer applies a 32× world tile scale by default
+  (panel slider 1–64×).
 - **Baked stack** — a 2048² map of four material IDs and four normalized
   weights over the 30.72 km window, plus a 1024² macro albedo for the far
-  field. The weight rules are steepness-driven rock/cliff, scree on moderate
-  slopes, snow on high north-facing ground and grass in low concavities.
+  field. The weight rules are steepness-driven: Rocky Terrain 02 owns the low
+  and moderate slopes, Rock Face 03 is the steep-face fraction, snow sits on
+  high north-facing ground, and seeded Aerial Grass Rock patches break up the
+  large rocky areas.
 - **Shading** — height-blended albedo, material normals composed as a slope sum
   (no TBN), triplanar projection for rock only, and distance fade to the macro
   albedo. The material-off path preserves the old palette.
-- **First-slice palette** — Jotunheimen uses `rock_face_03`, `gravelly_sand`,
-  `snow_02` and `sparse_grass`; the other 16 materials are for the synthetic
-  biome world in the follow-up change.
+- **First-slice palette** — Jotunheimen uses `rocky_terrain_02`,
+  `rock_face_03`, `snow_02` and `aerial_grass_rock`; the other 16 materials are
+  for the synthetic biome world in the follow-up change.
 
 [materials.html](https://mode777.github.io/normalmapped-terrain/materials.html)
 shows every packed albedo/slope pair. `dem.html` exposes material
@@ -124,7 +126,7 @@ instead of the unbounded wander.
 | Panel → Materials → Mode | material on / off / debug weight view |
 | Height blend | bias material boundaries by the packed height |
 | Material normals | scale the material slope contribution |
-| Texture scale | world tile multiplier; default 8×, slider 1–32× |
+| Texture scale | world tile multiplier; default 32×, slider 1–64× |
 
 ## Verification
 

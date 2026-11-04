@@ -219,8 +219,8 @@ the binary is at `~/.local/bin/openspec`.
 20. **The material stack is a whole-window 2048² pair plus a 1024² macro.** It
     stores four material IDs (library indices) and four weights per texel;
     weights sum to 255. The Jotunheimen slots are fixed in the order
-    `rock_face_03, gravelly_sand, snow_02, sparse_grass` (library indices
-    `2,6,0,9`). Row 0 is north, `+z` is south, and the PNGs load with
+    `rocky_terrain_02, rock_face_03, snow_02, aerial_grass_rock` (library
+    indices `3,2,0,7`). Row 0 is north, `+z` is south, and the PNGs load with
     `flipY=false`. IDs are nearest-sampled; weights are linear/mipmapped. Do
     not reorder slots without re-baking the stack and manifest.
 21. **The material stack is world-locked with the absolute render origin.**
@@ -229,7 +229,7 @@ the binary is at `~/.local/bin/openspec`.
     it must not use the phase-wrapped `uRenderOrigin` (that is for the tiled
     height/normal atlases). The stack is clamped, not repeated. Material UVs
     use `mod(renderOrigin, tileMeters * uMaterialScale)` and divide by the
-    same scaled tile (default 8×); do not modulo the unscaled physical size or
+    same scaled tile (default 32×); do not modulo the unscaled physical size or
     the pattern jumps on rebase.
 22. **Material normals are RG slopes, not RGB normals.** Decode
     `s = (rg * 2 - 1) * slopeScale`; Poly Haven's `nor_dx` is converted to the

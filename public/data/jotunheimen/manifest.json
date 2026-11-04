@@ -114,10 +114,10 @@
   "materials": {
     "library": "materials/manifest.json",
     "slots": [
+      "rocky_terrain_02",
       "rock_face_03",
-      "gravelly_sand",
       "snow_02",
-      "sparse_grass"
+      "aerial_grass_rock"
     ],
     "stack": {
       "ids": "stack-ids.png",
@@ -132,9 +132,9 @@
     "bakeVersion": 1,
     "seed": 20260217,
     "hashes": {
-      "ids": "10da2372017db485ae1a96f8197d4773326fdb0fb3b96cc6921b77c12f5171e9",
-      "weights": "ccf22377987e66b418562b0ee04b1dc521cd5b96d949ab3a9699ebdde95fa9bd",
-      "macro": "cd5e11bcb9291e52c319b14cab163d9f84db4dbc0c684c333fe952015936c5a2"
+      "ids": "ac5776cccfb3e725f94fabc8e83868b5b64789e7b853d3f74c98249616e80e92",
+      "weights": "ba32d4b9245fc8cfef962122782b8a99b965a19df8cf1b577a3483e345cad125",
+      "macro": "3c8f443ca577e5dc225762fa46805fbf6c8ba105dad9e68a3f3285eac89abac7"
     }
   }
 }

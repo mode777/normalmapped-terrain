@@ -120,7 +120,7 @@ export interface MaterialRenderOptions {
   heightBlend?: number;
   /** Global multiplier on material normal slope. */
   normalScale?: number;
-  /** Global multiplier on material world tile size (default 8×). */
+  /** Global multiplier on material world tile size (default 32×). */
   textureScale?: number;
   /** How strongly the packed AO darkens albedo, 0..1. */
   aoStrength?: number;
@@ -231,7 +231,7 @@ export class ClipmapRenderer {
     const materialFadeEnd = Math.max(materialFadeStart + 1, materials?.fadeEnd ?? 1);
     const materialHeightBlend = Math.max(0, Math.min(1, materials?.heightBlend ?? 0.25));
     const materialNormalScale = Math.max(0, Math.min(2, materials?.normalScale ?? 1));
-    const materialTextureScale = Math.max(0.5, Math.min(32, materials?.textureScale ?? 8));
+    const materialTextureScale = Math.max(0.5, Math.min(64, materials?.textureScale ?? 32));
     const materialAoStrength = Math.max(0, Math.min(1, materials?.aoStrength ?? 0.7));
     const entries = this.materialLibrary?.entries ?? [];
     this.materialParamsA = Array.from({ length: 24 }, (_, i) => {
@@ -657,7 +657,7 @@ export class ClipmapRenderer {
   }
 
   setMaterialScale(value: number): void {
-    this.terrainUniforms.uMaterialScale.value = Math.max(0.5, Math.min(32, value));
+    this.terrainUniforms.uMaterialScale.value = Math.max(0.5, Math.min(64, value));
   }
 
   getMaterialStats(): MaterialStats {

@@ -179,17 +179,18 @@ baked four-slot material stack. The material QA names:
 | `18-material-boundary` | wide view of the rock/snow/grass distribution |
 | `19-material-cliff` | steep-face rock and triplanar projection |
 | `20-material-distance` | macro albedo after the material texture fade |
-| `21-material-debug` | weight view: rock gray, scree orange, snow white, grass green |
+| `21-material-debug` | weight view: rocky tan, cliff dark, snow white, grass green |
 | `22-material-normal0` | material normal strength 0 at the same pose; the distribution must not move |
 | `23-material-swatches` | `materials.html` asset grid, all 20 albedo/slope pairs |
 
 The material distribution is a fixed four-material palette for this first
-slice: `rock_face_03`, `gravelly_sand`, `snow_02`, `sparse_grass`. The stack
-is 2048² over the 30.72 km window; the macro albedo is 1024². Material textures
-are 512² arrays with mips/anisotropy. The panel's **Texture scale** slider
-multiplies the material world tile (default 8×; range 1–32×); the world-lock
-offset uses the same scaled tile. The material-off path preserves the old
-height/slope palette; the infinite page does not load materials in this change.
+slice: `rocky_terrain_02`, `rock_face_03`, `snow_02`, `aerial_grass_rock`. The
+stack is 2048² over the 30.72 km window; the macro albedo is 1024². Material
+textures are 512² arrays with mips/anisotropy. The panel's **Texture scale**
+slider multiplies the material world tile (default 32×; range 1–64×); the
+world-lock offset uses the same scaled tile. The material-off path preserves
+the old height/slope palette; the infinite page does not load materials in
+this change.
 
 `puppeteer` runs at roughly 1 fps on SwiftShader with the material shader; the
 headless pass proves the pipeline, not real-GPU performance. A real-GPU

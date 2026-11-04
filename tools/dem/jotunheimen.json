@@ -20,7 +20,7 @@
   "attribution": "© Kartverket, Nasjonal høydemodell DTM 10, CC BY 4.0, modified (resampled, tiled, normals derived).",
   "materials": {
     "library": "public/materials/manifest.json",
-    "slots": ["rock_face_03", "gravelly_sand", "snow_02", "sparse_grass"],
+    "slots": ["rocky_terrain_02", "rock_face_03", "snow_02", "aerial_grass_rock"],
     "stackSize": 2048,
     "macroSize": 1024,
     "seed": 20260217

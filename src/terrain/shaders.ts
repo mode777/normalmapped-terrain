@@ -306,13 +306,13 @@ export const terrainFragmentShader: string = /* glsl */ `
       stackWeights = texture(uMaterialStackWeights, stackUv);
 
       if (uMaterialMode > 1.5) {
-        // Weight debug view: rock gray, scree orange, snow white, grass green.
+        // Weight debug view: rocky tan, cliff dark, snow white, grass green.
         // Blending the weights shows the distribution even where one material
         // dominates, unlike a single dominant-ID color.
-        vec3 weightColor = stackWeights.x * vec3(0.52, 0.49, 0.45)
-          + stackWeights.y * vec3(0.86, 0.55, 0.22)
+        vec3 weightColor = stackWeights.x * vec3(0.58, 0.55, 0.45)
+          + stackWeights.y * vec3(0.30, 0.29, 0.27)
           + stackWeights.z * vec3(0.95, 0.97, 1.0)
-          + stackWeights.w * vec3(0.20, 0.55, 0.16);
+          + stackWeights.w * vec3(0.25, 0.52, 0.18);
         gl_FragColor = vec4(weightColor, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
