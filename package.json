@@ -8,8 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:infinite": "node tools/test-infinite.mjs",
-    "deploy": "bash scripts/deploy.sh"
+    "test:infinite": "node tools/test-infinite.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

@@ -20,7 +20,6 @@ Ship anything visual only after verifying it renders — see
 npm install
 npm run dev                     # vite dev server; open /infinite.html
 npm run build                   # production build -> dist/
-npm run deploy                  # build + force-push dist/ to gh-pages
 
 npm run test:infinite           # Node-only tile/LOD/normal math checks
 npx vite preview                # serve dist/ locally on :4173
@@ -34,6 +33,7 @@ node tools/analyze-infinite.mjs shots-infinite
 
 | Path | Purpose |
 |---|---|
+| `.github/workflows/deploy.yml` | Push-to-`main` CI: unit checks, build, GitHub Pages deployment |
 | `src/perlin.js` | Seeded improved Perlin, fBM, ridged multifractal |
 | `src/terrain-compose.js` | Multi-noise channels, spline response curves, iterated domain warp, anisotropic ridge spines |
 | `src/sky-shaders.js` | Sky gradient + sun disc/halo shaders |
@@ -151,9 +151,14 @@ node tools/analyze-infinite.mjs shots-infinite
 - The height function must stay a pure function of `(x, z)`; global passes
   (e.g. erosion simulation) would make streamed tiles disagree at their seams.
 - Commits: concise imperative subject lines, e.g. `Fix Sobel z-gradient sign`.
-- Deploy = `npm run deploy` (orphan gh-pages branch from `dist/`). Pages is
-  served from the `gh-pages` branch root; `vite.config.js` sets
-  `base: './'` for project-page paths — don't remove that.
+- Deploy = push to `main`. GitHub Actions runs the unit checks, builds the
+  site and publishes `dist/` with the Pages Actions flow. Pages is configured
+  with source **GitHub Actions**, not a `gh-pages` branch. `vite.config.js`
+  sets `base: './'` for project-page paths — don't remove that.
+- Default CI runs `npm run test:infinite` and `npm run build` only. The
+  headless screenshot loop is a manual visual-debugging tool; use the SSH
+  verification host from `docs/VERIFICATION.md` when screenshots need to be
+  compared.
 - Never commit secrets. The verification recipe in `docs/VERIFICATION.md`
   intentionally references credentials only via environment variables.
 

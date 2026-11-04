@@ -77,6 +77,11 @@ test, and measures the normal-map contribution against flat normals with an
 [docs/VERIFICATION.md](docs/VERIFICATION.md) for the full recipe and reference
 values.
 
+Default CI runs `npm run test:infinite` (the Node-only checks) before building.
+The screenshot comparison loop is intentionally **not** part of the Actions
+deployment; use the SSH verification host when debugging a visual regression
+or comparing screenshots.
+
 ## Honest limitations
 
 - The far rings are coarse (up to 1024 m vertex spacing at LOD 9), so
@@ -107,8 +112,13 @@ npm install
 npm run dev             # local dev server; open /infinite.html
 npm run build           # static site in dist/
 npm run test:infinite   # Node-only tile/LOD/normal math checks
-npm run deploy          # build + push dist/ to the gh-pages branch
 ```
+
+Deployment is automatic: pushing to `main` runs
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml), which installs
+dependencies, runs the unit checks, builds the site and publishes `dist/` to
+GitHub Pages via the Pages Actions flow. Deployments are serialized by the
+`pages` concurrency group, so the newest push deploys last.
 
 Live at:
 **https://mode777.github.io/normalmapped-terrain/infinite.html**
@@ -116,6 +126,7 @@ Live at:
 ## Repo map
 
 ```
+.github/workflows/deploy.yml  CI: unit checks, build, Pages deployment
 AGENTS.md            orientation for AI coding agents (repo map + invariants)
 infinite.html        the PoC entry page
 docs/INFINITE_TERRAIN_CONCEPT.md  clipmap/tile-cache concept + results

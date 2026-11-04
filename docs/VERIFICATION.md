@@ -5,6 +5,17 @@ at the running page directly — so the repo ships a repeatable headless QA
 loop. Use it after any visual change; a green `vite build` says nothing about
 whether the scene actually renders.
 
+## Default CI vs visual debugging
+
+On every push to `main`, `.github/workflows/deploy.yml` runs
+`npm run test:infinite` and `npm run build`, then deploys the built site to
+GitHub Pages. That is the default test suite: Node-only math checks plus a
+production build.
+
+The headless screenshot loop below is deliberately **not** part of the
+deployment workflow. Run it locally, or on the SSH verification host, when you
+need to debug rendering or compare screenshots before/after a visual change.
+
 ## The loop
 
 ```bash
@@ -47,13 +58,16 @@ Reference values from the verified multi-noise terrain build (Nov 2026):
 160 resident tiles after both 25 km and 500 km warps. The normal cache is
 2048 texels / ~128 MiB — the WebGL2 ceiling.
 
-## Where to run it
+## Where to run the screenshot loop
 
 Any Linux box with Node ≥ 20 and a chrome-headless-shell binary (set
-`--chrome` or `CHROME_SHELL_PATH`). The dev environment used for this repo
-had a dedicated verification host reachable via SSH; credentials live in
-`SSH_HOST` / `SSH_USER` / `SSH_PASSWORD` environment variables there —
-never in files, never in this repo. Sketch, for that setup:
+`--chrome` or `CHROME_SHELL_PATH`). GitHub Actions does not run this loop; it
+is for manual visual debugging and screenshot comparison.
+
+The dev environment used for this repo had a dedicated verification host
+reachable via SSH; credentials live in `SSH_HOST` / `SSH_USER` /
+`SSH_PASSWORD` environment variables there — never in files, never in this
+repo. Sketch, for that setup:
 
 ```bash
 ssh "$SSH_USER@$SSH_HOST" 'mkdir -p ~/verify/shots'
