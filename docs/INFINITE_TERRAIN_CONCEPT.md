@@ -119,7 +119,7 @@ swim. A 2 m camera step is a whole cell for LOD 0 but `1/2^L` of a cell for
 ring `L`: every coarse vertex re-samples its height tile between texel
 centres and the surface visibly deforms as the camera moves.
 
-Instead each level snaps to **its own** spacing (`src/infinite/origins.js`):
+Instead each level snaps to **its own** spacing (`src/infinite/origins.ts`):
 
 ```
 origin_L = round(camera.xz / S_L) * S_L
@@ -173,8 +173,10 @@ For each LOD `L`:
 
 Both are WebGL2 `DataArrayTexture`s with `LEVELS` layers:
 
-- height: `256 × 256` texels per layer (`4 × 4` tiles of `64 × 64`) ≈ 1 MiB
-- normal: `2048 × 2048` texels per layer (`4 × 4` tiles of `512 × 512`) ≈ 128 MiB
+- height: `256 × 256` texels per layer (`4 × 4` tiles of `64 × 64`), ≈ 128 KiB
+  per layer / ~1.25 MiB for 10 layers
+- normal: `2048 × 2048` texels per layer (`4 × 4` tiles of `512 × 512`), ≈ 16 MiB
+  per layer / ~160 MiB for 10 layers
 
 The normal map is baked at **8× the height-tile resolution**, so it carries
 0.25 m detail against the 2 m near-field vertex spacing. Sampling uses
@@ -465,5 +467,5 @@ Remaining honest limitations:
   quantisation/aliasing.
 - Tile generation is CPU-bound in workers; a cold boot on a slow phone can
   take several seconds (the 8× normal bake is ~7× the original per-tile work,
-  plus two extra LOD layers). The normal cache is ~128 MiB of GPU texture
+  plus two extra LOD layers). The normal cache is ~160 MiB of GPU texture
   memory; the CPU-side allocation is freed after the initial upload.

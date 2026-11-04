@@ -3,7 +3,7 @@
 Why plain Perlin-fBM terrain looks bland, what the literature and shipped
 games do about it, and what this repo adopted (and rejected). Written
 November 2026 while replacing the plain fBM composition with the current
-multi-noise/spline/warp pipeline in `src/terrain-compose.js`.
+multi-noise/spline/warp pipeline in `src/terrain-compose.ts`.
 
 ## The diagnosis: why plain fBM terrain is boring
 
@@ -31,7 +31,7 @@ A fourth, subtler point we hit directly: **fBM loses contrast**. Because
 summing octaves averages them out, `0.5·fbm+0.5` concentrates in roughly
 [0.3, 0.7]. Any response curve designed for [0, 1] input only ever sees its
 linear middle. Channels must be contrast-expanded before they drive anything
-(see `expand01` in `src/terrain-compose.js`).
+(see `expand01` in `src/terrain-compose.ts`).
 
 ## Technique survey
 
@@ -154,7 +154,7 @@ Minecraft carves overhangs/arches by thresholding full 3D noise
 (`h(x,z)`); overhangs are structurally impossible. Noted because every
 Minecraft explainer mentions it.
 
-## What we shipped (`src/terrain-compose.js`)
+## What we shipped (`src/terrain-compose.ts`)
 
 ```
 height(p) = baseSpline(continent(p))                    // elevation tiers

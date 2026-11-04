@@ -20,15 +20,16 @@ need to debug rendering or compare screenshots before/after a visual change.
 
 ```bash
 npm run test:infinite                        # Node-only tile/LOD/normal math
+npm run typecheck                            # strict TypeScript check
 npm run build && npx vite preview &          # serve dist/ on :4173
 npm install --no-save puppeteer-core         # once, next to the repo
 
-node tools/screenshot-infinite.mjs \
+node tools/screenshot-infinite.ts \
   --url http://127.0.0.1:4173/infinite.html --out shots-infinite
-node tools/analyze-infinite.mjs shots-infinite
+node tools/analyze-infinite.ts shots-infinite
 ```
 
-`screenshot-infinite.mjs` drives chrome-headless-shell with **SwiftShader**
+`screenshot-infinite.ts` drives chrome-headless-shell with **SwiftShader**
 (software WebGL) via flags `--use-angle=swiftshader
 --enable-unsafe-swiftshader`. It waits for the worker-generated tile cache,
 then captures the default view, a same-pose flat-normal view, auto-cruise
@@ -36,7 +37,7 @@ movement, a 25 km warp, a 500 km warp, the LOD/wire debug view, the tile-grid
 view and a crack-hunt view. It also writes `console.json`; any console error,
 page error or failed request fails the run.
 
-`analyze-infinite.mjs` asserts:
+`analyze-infinite.ts` asserts:
 
 | Check | Meaning |
 |---|---|
@@ -56,13 +57,15 @@ Reference values from the verified multi-noise terrain build (Nov 2026):
 160 resident tiles after streaming settles, 165k triangles, 4 draw calls,
 2 workers, normal-map `hf=9.16` vs flat `hf=0.23`, zero upload errors,
 160 resident tiles after both 25 km and 500 km warps. The normal cache is
-2048 texels / ~128 MiB — the WebGL2 ceiling.
+2048 texels per side / ~160 MiB — the WebGL2 ceiling.
 
 ## Where to run the screenshot loop
 
-Any Linux box with Node ≥ 20 and a chrome-headless-shell binary (set
-`--chrome` or `CHROME_SHELL_PATH`). GitHub Actions does not run this loop; it
-is for manual visual debugging and screenshot comparison.
+Any Linux box with Node ≥ 24 (for native `.ts` execution) and a
+chrome-headless-shell binary (set `--chrome` or `CHROME_SHELL_PATH`). GitHub
+Actions does not run this loop; it is for manual visual debugging and
+screenshot comparison. On an older Node, compile or bundle the two QA scripts
+first; they have no app runtime dependency.
 
 The dev environment used for this repo had a dedicated verification host
 reachable via SSH; credentials live in `SSH_HOST` / `SSH_USER` /
@@ -118,7 +121,7 @@ to its parent's outer square, with a one-cell pad absorbing the per-level
 origin offset. A regression shows up as a thin magenta hairline.
 
 `__infinite.setCrackDebug(true)` hides the sky and clears to magenta;
-`08-cracks` is taken at the 500 km warp. `analyze-infinite.mjs` counts pink
+`08-cracks` is taken at the 500 km warp. `analyze-infinite.ts` counts pink
 pixels in the lower half of the frame (guaranteed terrain) and fails above
 0.2 %, which is far below what the eye picks up. For a manual check, look at
 the shot directly: magenta is only allowed above the horizon.

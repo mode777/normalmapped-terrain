@@ -19,39 +19,63 @@ Ship anything visual only after verifying it renders — see
 ```bash
 npm install
 npm run dev                     # vite dev server; open /infinite.html
-npm run build                   # production build -> dist/
+npm run typecheck               # strict tsc for app + Node tools/config
+npm run build                   # typecheck + production build -> dist/
 
-npm run test:infinite           # Node-only tile/LOD/normal math checks
-npx vite preview                # serve dist/ locally on :4173
+npm run test:infinite           # Node-only math checks; one script, no per-test filter
+npm run preview                 # serve dist/ on :4173 (build first)
 
-# headless QA (needs chrome-headless-shell + puppeteer-core, see docs/VERIFICATION.md)
-node tools/screenshot-infinite.mjs --url http://127.0.0.1:4173/infinite.html --out shots-infinite
-node tools/analyze-infinite.mjs shots-infinite
+# headless QA (optional; see docs/VERIFICATION.md)
+npm install --no-save puppeteer-core
+node tools/screenshot-infinite.ts --url http://127.0.0.1:4173/infinite.html --out shots-infinite
+node tools/analyze-infinite.ts shots-infinite
+
+# OpenSpec
+openspec list                   # active changes; add --specs for current specs
+openspec validate --all
 ```
+
+## OpenSpec
+
+Planning lives in `openspec/`: `specs/` is current behavior, `changes/` holds
+active proposals, and `changes/archive/` holds completed ones. `.opencode/`
+holds the generated OpenSpec skills and `/opsx-*` commands — refresh them with
+`openspec update`, don't hand-edit them.
+
+Use `/opsx-propose <idea>` (or the `openspec-propose` skill) before a
+non-trivial change, `/opsx-apply` to implement, and `/opsx-archive` when done.
+Commit and merge when apply finishes; archive on main and commit after archive
+or sync. Validate with `openspec validate --all`. In this container `openspec`
+may not be on `PATH`; the binary is at `~/.local/bin/openspec`.
 
 ## Repo map
 
 | Path | Purpose |
 |---|---|
 | `.github/workflows/deploy.yml` | Push-to-`main` CI: unit checks, build, GitHub Pages deployment |
-| `src/perlin.js` | Seeded improved Perlin, fBM, ridged multifractal |
-| `src/terrain-compose.js` | Multi-noise channels, spline response curves, iterated domain warp, anisotropic ridge spines |
-| `src/sky-shaders.js` | Sky gradient + sun disc/halo shaders |
+| `openspec/` | OpenSpec specs, active changes, archive, and `config.yaml` |
+| `.opencode/` | Generated OpenSpec skills + `/opsx-*` commands; do not hand-edit |
+| `tsconfig.json` | Strict TypeScript config for browser source (`src/`) |
+| `tsconfig.node.json` | Strict config for Node QA tools + `vite.config.ts` |
+| `src/perlin.ts` | Seeded improved Perlin, fBM, ridged multifractal |
+| `src/terrain-compose.ts` | Multi-noise channels, spline response curves, iterated domain warp, anisotropic ridge spines |
+| `src/sky-shaders.ts` | Sky gradient + sun disc/halo shaders |
 | `src/styles.css` | Shared UI chrome (panels, stats, sliders, loading overlay) |
-| `src/infinite/heightfield.js` | Infinite seeded height function + per-tile float-Sobel normal baking |
-| `src/infinite/origins.js` | Per-LOD clipmap origins: each level snaps to its own spacing |
-| `src/infinite/terrain-worker.js` | Worker wrapper around `generateTile` (transfers buffers) |
-| `src/infinite/tiles.js` | Toroidal per-LOD tile cache, worker queue, `texSubImage3D` uploads |
-| `src/infinite/clipmap.js` | Centre block, padded ring grids, parent-square trim, skirts |
-| `src/infinite/shaders.js` | Clipmap vertex/fragment shaders + LOD/tile debug views |
-| `src/infinite/flight.js` | Free-fly / auto-cruise camera in absolute world doubles |
-| `src/infinite/main.js` | Infinite scene, floating origin, texture arrays, UI, stats |
-| `src/infinite/ui.js` | DOM control wiring; `initUI(callbacks)` returns a setter API |
+| `src/infinite/heightfield.ts` | Infinite seeded height function + per-tile float-Sobel normal baking |
+| `src/infinite/origins.ts` | Per-LOD clipmap origins: each level snaps to its own spacing |
+| `src/infinite/worker-protocol.ts` | Typed messages shared by the main thread and tile worker |
+| `src/infinite/terrain-worker.ts` | Worker wrapper around `generateTile` (transfers buffers) |
+| `src/infinite/tiles.ts` | Toroidal per-LOD tile cache, worker queue, `texSubImage3D` uploads |
+| `src/infinite/clipmap.ts` | Centre block, padded ring grids, parent-square trim, skirts |
+| `src/infinite/shaders.ts` | Clipmap vertex/fragment shaders + LOD/tile debug views |
+| `src/infinite/flight.ts` | Free-fly / auto-cruise camera in absolute world doubles |
+| `src/infinite/main.ts` | Infinite scene, floating origin, texture arrays, UI, stats |
+| `src/infinite/ui.ts` | DOM control wiring; `initUI(callbacks)` returns a setter API |
 | `src/infinite/infinite.css` | Page-specific additions to `src/styles.css` |
 | `infinite.html` | The PoC entry page |
-| `tools/test-infinite.mjs` | Node-only tile/LOD/normal math checks |
-| `tools/screenshot-infinite.mjs` | Headless QA driver for `infinite.html` |
-| `tools/analyze-infinite.mjs` | Pixel/console assertions for the screenshots |
+| `tools/test-infinite.ts` | Node-only tile/LOD/normal math checks |
+| `tools/screenshot-infinite.ts` | Headless QA driver for `infinite.html` |
+| `tools/analyze-infinite.ts` | Pixel/console assertions for the screenshots |
 | `docs/` | INFINITE_TERRAIN_CONCEPT.md, TERRAIN_RESEARCH.md, VERIFICATION.md |
 
 ## Critical invariants — breaking these silently ruins the render
@@ -68,7 +92,7 @@ node tools/analyze-infinite.mjs shots-infinite
 3. **Bake normals from float data, never from an 8-bit heightmap.** Quantised
    heights terrace the gradients. Only the unit-length normals themselves may
    be quantised to RGB8.
-4. **Sobel gradient scaling** (`src/infinite/heightfield.js`): response must be
+4. **Sobel gradient scaling** (`src/infinite/heightfield.ts`): response must be
    divided by `8 * pixelSpacing` (Sobel sums weight ±spacing across 4 taps) and
    multiplied by `heightScale` before forming `N ∝ (-dh/dx, 1, -dh/dz)`.
 5. **`uNormalStrength` is applied to the decoded tangent components**, then
@@ -129,48 +153,63 @@ node tools/analyze-infinite.mjs shots-infinite
     ≈49 km, height tile 64², normal tile 512², cache 4×4, `morphCells=3`.
     Ring `L` covers `[C·S_L, 2C·S_L]` = `[48·2^L, 96·2^L] m`; the last ring
     gets the only real skirt. Do not reduce `normalScale` without re-checking
-    the detail-vs-mesh ratio. The normal cache is 2048 texels — exactly the
-    WebGL2 ceiling, so the shrink-to-fit in `main.js` stays.
+    the detail-vs-mesh ratio. The normal cache is 2048² per layer (10 layers,
+    ~160 MiB) — exactly the WebGL2 guaranteed minimum `MAX_TEXTURE_SIZE`, so
+    `main.ts` throws rather than growing it.
 
 ## Conventions & practices
 
-- ES modules everywhere, no TypeScript, no linter config yet — match the
-  existing style (small modules, JSDoc-ish comments on tricky math).
-- Runtime dependencies: `three` only. `vite`/`pngjs` are devDependencies
-  (`pngjs` is Node-only, used by `tools/analyze-infinite.mjs`). Keep it that
-  way unless there's a strong reason.
+- TypeScript everywhere (strict mode, ES modules), no linter/formatter config
+  yet — match the existing style (small typed modules, JSDoc-ish comments on
+  tricky math). Relative imports keep the `.ts` extension and type-only
+  imports use `import type` (`allowImportingTsExtensions`,
+  `verbatimModuleSyntax`); Node runs the QA tools directly, so extensionless
+  imports break them. `tsconfig.json` type-checks `src/` with browser libs
+  only, so Node globals cannot leak into app code. `tsconfig.node.json`
+  type-checks the Node QA tools and `vite.config.ts`;
+  `tools/screenshot-infinite.ts` is excluded because `puppeteer-core` is an
+  optional install.
+- Runtime dependencies: `three` only. `typescript`, `@types/three`,
+  `@types/node`, `vite`/`pngjs` are devDependencies (`pngjs` is Node-only,
+  used by `tools/analyze-infinite.ts`). `puppeteer-core` stays an optional
+  `npm install --no-save` for the screenshot driver. Keep it that way unless
+  there's a strong reason.
+- Node ≥24 runs the `.ts` QA tools directly via native type stripping. Vite
+  transpiles the app and worker; it does not type-check, so `npm run
+  typecheck` (or `npm run build`) is the type gate.
 - Perf-relevant constants (noise-evaluation count per height sample in
-  `terrain-compose.js` — ~36, and the infinite-page `S0`/`LEVELS`/`normalScale`)
+  `terrain-compose.ts` — ~36, and the infinite-page `S0`/`LEVELS`/`normalScale`)
   were chosen to keep tile streaming hitch-free. Adding channels costs every
   tile bake; profile before loosening them.
 - The tile generation **must stay in workers**; generating 64² height /
   512² normal tiles on the main thread causes visible hitches at tile
   crossings. The streamer uses up to 2 workers because the 8× normal bake is
   ~7× the work of a 2× build. The 4×4 cache covers the visible 3×3 ring plus a
-  prefetch row/column; the normal cache costs ~128 MiB.
+  prefetch row/column; the normal cache costs ~160 MiB.
 - The height function must stay a pure function of `(x, z)`; global passes
   (e.g. erosion simulation) would make streamed tiles disagree at their seams.
 - Commits: concise imperative subject lines, e.g. `Fix Sobel z-gradient sign`.
 - Deploy = push to `main`. GitHub Actions runs the unit checks, builds the
   site and publishes `dist/` with the Pages Actions flow. Pages is configured
-  with source **GitHub Actions**, not a `gh-pages` branch. `vite.config.js`
+  with source **GitHub Actions**, not a `gh-pages` branch. `vite.config.ts`
   sets `base: './'` for project-page paths — don't remove that.
-- Default CI runs `npm run test:infinite` and `npm run build` only. The
-  headless screenshot loop is a manual visual-debugging tool; use the SSH
-  verification host from `docs/VERIFICATION.md` when screenshots need to be
-  compared.
+- Default CI runs `npm run test:infinite` and `npm run build` only; the build
+  script includes `tsc --noEmit`. The headless screenshot loop is a manual
+  visual-debugging tool; set `--chrome` or `CHROME_SHELL_PATH` (the built-in
+  default is from the original dev box) and use the SSH verification host in
+  `docs/VERIFICATION.md` when screenshots need to be compared.
 - Never commit secrets. The verification recipe in `docs/VERIFICATION.md`
   intentionally references credentials only via environment variables.
 
 ## Where the tricky math lives
 
-- Sobel → world-space normal derivation: `src/infinite/heightfield.js`.
+- Sobel → world-space normal derivation: `src/infinite/heightfield.ts`.
 - Terrain composition (multi-noise channels, monotone-cubic spline response
   curves, contrast expansion, iterated domain warp, anisotropic ridge
-  spines): `src/terrain-compose.js` + `docs/TERRAIN_RESEARCH.md`.
+  spines): `src/terrain-compose.ts` + `docs/TERRAIN_RESEARCH.md`.
 - Per-LOD snapping, padded rings, parent-square clip and morphs:
-  `src/infinite/origins.js`, `src/infinite/clipmap.js`,
-  `src/infinite/shaders.js` + `docs/INFINITE_TERRAIN_CONCEPT.md`.
-- Toroidal cache and texture uploads: `src/infinite/tiles.js`.
-- Floating origin and tile phase: `src/infinite/main.js`,
-  `src/infinite/flight.js`.
+  `src/infinite/origins.ts`, `src/infinite/clipmap.ts`,
+  `src/infinite/shaders.ts` + `docs/INFINITE_TERRAIN_CONCEPT.md`.
+- Toroidal cache and texture uploads: `src/infinite/tiles.ts`.
+- Floating origin and tile phase: `src/infinite/main.ts`,
+  `src/infinite/flight.ts`.

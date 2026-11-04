@@ -65,9 +65,9 @@ npm run test:infinite               # Node-only tile/LOD/normal math checks
 npm run build && npx vite preview   # serve dist/ on :4173
 
 npm install --no-save puppeteer-core
-node tools/screenshot-infinite.mjs \
+node tools/screenshot-infinite.ts \
   --url http://127.0.0.1:4173/infinite.html --out shots-infinite
-node tools/analyze-infinite.mjs shots-infinite
+node tools/analyze-infinite.ts shots-infinite
 ```
 
 The headless QA verifies 160 resident tiles after streaming settles, no
@@ -91,16 +91,17 @@ or comparing screenshots.
 - Normal maps are RGB8, so extreme grazing-angle lighting can still show
   quantisation/aliasing.
 - Tile generation is CPU-bound in workers; a cold boot on a slow phone can
-  take several seconds. The 8× normal cache costs ~128 MiB of GPU texture
+  take several seconds. The 8× normal cache costs ~160 MiB of GPU texture
   memory (the CPU-side buffer is freed after allocation).
-- The cache is exactly 2048 texels — the WebGL2 ceiling — which is why the
-  spacing was reduced instead of growing it.
+- The cache is exactly 2048 texels per side — the WebGL2 ceiling — which is
+  why the spacing was reduced instead of growing it.
 
 ## Documentation
 
 | Doc | What's inside |
 |---|---|
 | [AGENTS.md](AGENTS.md) | Orientation for AI coding agents: repo map, commands, critical invariants, practices |
+| [openspec/](openspec/) | OpenSpec specs, active change proposals and archive |
 | [docs/INFINITE_TERRAIN_CONCEPT.md](docs/INFINITE_TERRAIN_CONCEPT.md) | Per-LOD snapping, padded rings with parent-square trim and morphs, toroidal tile cache, floating origin, decisions and measured results |
 | [docs/TERRAIN_RESEARCH.md](docs/TERRAIN_RESEARCH.md) | Why plain fBM is bland and the composition this repo adopted: multi-noise channels, spline curves, domain warp, ridge spines |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | Repeatable headless QA, acceptance metrics, manual test pass |
@@ -110,9 +111,14 @@ or comparing screenshots.
 ```bash
 npm install
 npm run dev             # local dev server; open /infinite.html
-npm run build           # static site in dist/
+npm run typecheck       # strict TypeScript check, no emit
+npm run build           # typecheck + static site in dist/
 npm run test:infinite   # Node-only tile/LOD/normal math checks
 ```
+
+The application source is TypeScript (`src/**/*.ts`); Vite strips types for
+the browser and worker bundles. Node ≥ 24 runs the `.ts` QA tools directly via
+native type stripping.
 
 Deployment is automatic: pushing to `main` runs
 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml), which installs
@@ -128,16 +134,17 @@ Live at:
 ```
 .github/workflows/deploy.yml  CI: unit checks, build, Pages deployment
 AGENTS.md            orientation for AI coding agents (repo map + invariants)
+openspec/            OpenSpec specs, active changes and archive
 infinite.html        the PoC entry page
 docs/INFINITE_TERRAIN_CONCEPT.md  clipmap/tile-cache concept + results
 docs/TERRAIN_RESEARCH.md          terrain-composition research + sources
 docs/VERIFICATION.md              headless QA recipe + acceptance metrics
-src/perlin.js        seeded improved Perlin + fBM + ridged multifractal
-src/terrain-compose.js  multi-noise/spline/warp terrain composition
-src/sky-shaders.js   sky gradient + sun disc/halo shaders
+src/perlin.ts        seeded improved Perlin + fBM + ridged multifractal
+src/terrain-compose.ts  multi-noise/spline/warp terrain composition
+src/sky-shaders.ts   sky gradient + sun disc/halo shaders
 src/styles.css       shared UI chrome
 src/infinite/        heightfield worker, toroidal tiles, clipmaps, flight
-                     controller, infinite shaders/UI
+                     controller, infinite shaders/UI (all TypeScript)
 tools/               unit checks + headless QA drivers
 ```
 
