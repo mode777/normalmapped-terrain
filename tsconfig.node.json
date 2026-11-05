@@ -12,8 +12,13 @@
     "tools/test-materials.ts",
     "tools/analyze-infinite.ts",
     "tools/analyze-dem.ts",
+    "tools/analyze-biome.ts",
     "tools/test-dem.ts",
+    "tools/test-biome.ts",
     "tools/bake-dem.ts",
+    "tools/bake-biome.ts",
+    "tools/biome/**/*.ts",
+    "tools/prebaked/**/*.ts",
     "tools/dem/**/*.ts",
     "vite.config.ts"
   ]

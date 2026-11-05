@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "threshold": 2,
+  "levels": [
+    {
+      "level": 0,
+      "samples": 131072,
+      "maxError": 1,
+      "meanError": 0.00049591064453125
+    },
+    {
+      "level": 1,
+      "samples": 32768,
+      "maxError": 0,
+      "meanError": 0
+    },
+    {
+      "level": 2,
+      "samples": 8192,
+      "maxError": 0,
+      "meanError": 0
+    },
+    {
+      "level": 3,
+      "samples": 2048,
+      "maxError": 0,
+      "meanError": 0
+    },
+    {
+      "level": 4,
+      "samples": 2048,
+      "maxError": 0,
+      "meanError": 0
+    }
+  ]
+}

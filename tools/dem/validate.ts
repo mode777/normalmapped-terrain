@@ -73,10 +73,64 @@ function validateMaterials(
     );
   }
   const publicRoot = join(outputDir, '..', '..');
-  const libraryPath = join(publicRoot, block.library);
+  let libraryPath = join(publicRoot, block.library);
+  if (!existsSync(libraryPath)) {
+    // `--out` can point outside public/data/<dataset>; fall back to the
+    // repository's checked-in public root.
+    libraryPath = join(process.cwd(), 'public', block.library);
+  }
   const library = loadMaterialLibrary(libraryPath);
   if (new Set(block.slots).size !== 4) throw new Error('material slots are not unique');
   const expectedIndices = block.slots.map((id) => materialIndex(library, id));
+
+  // Multi-palette stacks may use a different four-ID set in each region and
+  // transition band. Build the allowed quartets and validate every texel
+  // against them; the single-palette path stays exactly as before.
+  const paletteQuartets = new Map<string, string>();
+  const transitionQuartets = new Map<string, string>();
+  const hasPalettes = (block.palettes?.length ?? 0) > 0;
+  if (hasPalettes) {
+    const regionIds = new Set<string>();
+    for (const palette of block.palettes ?? []) {
+      if (!palette.id) throw new Error('material palette is missing an id');
+      if (regionIds.has(palette.id)) throw new Error(`duplicate material palette ${palette.id}`);
+      regionIds.add(palette.id);
+      if (palette.slots.length !== 4) {
+        throw new Error(`material palette ${palette.id} must have four IDs`);
+      }
+      if (new Set(palette.slots).size !== 4) {
+        throw new Error(`material palette ${palette.id} slots are not unique`);
+      }
+      const indices = palette.slots.map((id) => {
+        try {
+          return materialIndex(library, id);
+        } catch {
+          throw new Error(`material palette ${palette.id} references missing material ${id}`);
+        }
+      });
+      paletteQuartets.set(indices.join(','), `palette ${palette.id}`);
+    }
+    for (const transition of block.transitions ?? []) {
+      const label = `transition ${transition.from}->${transition.to}`;
+      if (!regionIds.has(transition.from) || !regionIds.has(transition.to)) {
+        throw new Error(`${label} references an unknown region`);
+      }
+      if (!(transition.width > 0)) throw new Error(`${label} has invalid width`);
+      if (transition.slots.length !== 4) throw new Error(`${label} must have four IDs`);
+      if (new Set(transition.slots).size !== 4) throw new Error(`${label} slots are not unique`);
+      const indices = transition.slots.map((id) => {
+        try {
+          return materialIndex(library, id);
+        } catch {
+          throw new Error(`${label} references missing material ${id}`);
+        }
+      });
+      transitionQuartets.set(indices.join(','), label);
+    }
+    if (paletteQuartets.size + transitionQuartets.size === 0) {
+      throw new Error('material palettes are declared but none are valid');
+    }
+  }
 
   const idsPath = join(outputDir, block.stack.ids);
   const weightsPath = join(outputDir, block.stack.weights);
@@ -97,12 +151,27 @@ function validateMaterials(
   const weightMax: [number, number, number, number] = [-Infinity, -Infinity, -Infinity, -Infinity];
   const pixelCount = block.stack.size * block.stack.size;
   for (let i = 0; i < ids.length; i += 4) {
+    if (hasPalettes) {
+      const quartet = [
+        ids[i] ?? 0,
+        ids[i + 1] ?? 0,
+        ids[i + 2] ?? 0,
+        ids[i + 3] ?? 0,
+      ];
+      const key = quartet.join(',');
+      const label = paletteQuartets.get(key) ?? transitionQuartets.get(key);
+      if (!label) {
+        throw new Error(
+          `material IDs [${key}] at texel ${i / 4} do not match any palette or transition`,
+        );
+      }
+    }
     for (let k = 0; k < 4; k++) {
       const id = ids[i + k] ?? 0;
       if (id >= library.materials.length) {
         throw new Error(`material ID ${id} at texel ${i / 4} is outside the library`);
       }
-      if (id !== expectedIndices[k]) {
+      if (!hasPalettes && id !== expectedIndices[k]) {
         throw new Error(`material slot ${k} uses ID ${id}, expected ${expectedIndices[k]}`);
       }
       const weight = (weights[i + k] ?? 0) / 255;

@@ -6,13 +6,14 @@ the lighting normals come from per-pixel normal maps baked from the same float
 heightfield. The same renderer works for both a procedural world and a
 checked-in real DEM.
 
-Two terrain pages share one texture-backed clipmap renderer; a third page shows
-the packed material library:
+Three terrain pages share one texture-backed clipmap renderer; a fourth page
+shows the packed material library:
 
 | Page | Dataset | What it proves |
 |---|---|---|
 | [`infinite.html`](https://mode777.github.io/normalmapped-terrain/infinite.html) | Seeded procedural height function, streamed by workers | An effectively infinite world from a small mesh |
 | [`dem.html`](https://mode777.github.io/normalmapped-terrain/dem.html) | Kartverket DTM 10, Jotunheimen, checked in as height/normal tiles | The same renderer consumes offline-baked real terrain with textured materials |
+| [`biome.html`](https://mode777.github.io/normalmapped-terrain/biome.html) | Generated 15.36 km world with six climate-driven biome palettes | One bounded material library covers arctic → tropical with stable transition bands |
 | [`materials.html`](https://mode777.github.io/normalmapped-terrain/materials.html) | Poly Haven CC0 library, packed offline | Asset-level albedo/slope QA for the 20-material set |
 
 [![Infinite terrain, clipmap rings and normal-mapped detail](docs/screenshots/infinite-default.png)](https://mode777.github.io/normalmapped-terrain/infinite.html)
@@ -84,6 +85,34 @@ baked offline by `tools/bake-dem.ts`, checked into
 - **Material textures:** [Poly Haven](https://polyhaven.com/) CC0 assets,
   packed and resampled. See [public/materials/README.md](public/materials/README.md).
 
+## Synthetic biome world
+
+[![Synthetic biome world](docs/screenshots/biome-world.png)](https://mode777.github.io/normalmapped-terrain/biome.html)
+
+`biome.html` renders a generated 15.36 km × 15.36 km world whose climate axis
+runs from arctic through tundra, boreal, temperate and arid to tropical. It
+uses the same `ClipmapRenderer`, `TileCache` and material shader as the
+Jotunheimen page.
+
+- **Compact by design:** 15 m L0 mesh, 5 LODs, 1,024² height grid and 2× normal
+  tiles produce 344 tiles and an ~18.5 MB dataset.
+- **Six palettes, five bands:** each region has four materials; each adjacent
+  pair has a fixed four-material transition palette. Secondary materials fade
+  to zero before the ID set changes, so the nearest-sampled IDs do not pop.
+- **Local assets only:** the bake reads the checked-in Poly Haven library in
+  `public/materials/`; it never calls the live API.
+- **Traversal page:** the legend jumps to each region, and the normal material
+  on/off/debug, height-blend, normal and texture-scale controls still apply.
+
+```bash
+npm run bake:biome                    # regenerate public/data/biomes
+npm run test:biome                    # synthetic + checked-in dataset checks
+node tools/bake-biome.ts --config tools/biome/config.json --check-materials
+```
+
+See [docs/BIOME_WORLD.md](docs/BIOME_WORLD.md) for the world, palette and
+transition rules.
+
 ## Textured material layer
 
 The DEM page replaces the flat height/slope color bands with a checked-in
@@ -104,8 +133,8 @@ Poly Haven library and a baked four-slot distribution:
   (no TBN), triplanar projection for rock only, and distance fade to the macro
   albedo. The material-off path preserves the old palette.
 - **First-slice palette** — Jotunheimen uses `rocky_terrain_02`,
-  `rock_face_03`, `snow_02` and `aerial_grass_rock`; the other 16 materials are
-  for the synthetic biome world in the follow-up change.
+  `rock_face_03`, `snow_02` and `aerial_grass_rock`. The biome page reuses 17
+  of the 20 library materials across six palettes.
 
 [materials.html](https://mode777.github.io/normalmapped-terrain/materials.html)
 shows every packed albedo/slope pair. `dem.html` exposes material
@@ -134,6 +163,7 @@ instead of the unbounded wander.
 ```bash
 npm run test:infinite               # Node-only tile/LOD/normal math checks
 npm run test:dem                    # synthetic + checked-in DEM dataset checks
+npm run test:biome                  # synthetic + checked-in biome dataset checks
 npm run test:materials              # packed Poly Haven library checks
 npm run build && npx vite preview   # serve dist/ on :4173
 
@@ -145,6 +175,10 @@ node tools/analyze-infinite.ts shots-infinite
 node tools/screenshot-dem.ts \
   --url http://127.0.0.1:4173/dem.html --out shots-dem
 node tools/analyze-dem.ts shots-dem
+
+node tools/screenshot-biome.ts \
+  --url http://127.0.0.1:4173/biome.html --out shots-biome
+node tools/analyze-biome.ts shots-biome
 ```
 
 The infinite headless QA verifies 160 resident tiles after streaming settles,
@@ -158,7 +192,7 @@ See [docs/VERIFICATION.md](docs/VERIFICATION.md) for the full recipe and
 reference values.
 
 Default CI runs `npm run test:infinite`, `npm run test:dem`,
-`npm run test:materials` and `npm run build`. The screenshot comparison loops
+`npm run test:biome`, `npm run test:materials` and `npm run build`. The screenshot comparison loops
 are intentionally **not** part of the Actions deployment; use the SSH
 verification host when debugging a visual regression or comparing screenshots.
 
@@ -180,14 +214,19 @@ verification host when debugging a visual regression or comparing screenshots.
   invent survey detail. The checked-in dataset is ~107.5 MB; the 2× normal PNGs
   are the dominant cost.
 - The packed Poly Haven library is ~34 MB (20 × two 512² PNGs). The material
-  stack/macro adds ~6 MB to the DEM dataset.
+  stack/macro adds ~6 MB to the DEM dataset; the biome dataset is ~18.5 MB
+  including tiles, stack, macro, map and report.
 - The material shader runs at roughly 1 fps on SwiftShader. That is a software
   rasterizer, not a real-GPU frame time; the real-GPU filtering/performance
   pass is still outstanding.
-- Jotunheimen uses a fixed four-material palette. The other 16 library materials
-  are for the synthetic biome world; the infinite page does not load materials
-  in this change. The stack is a whole-window 2048² map (~15 m/texel), not
-  per-LOD material tiles.
+- Jotunheimen uses a fixed four-material palette; the biome page uses six
+  four-material palettes and five transition bands from the same 20-material
+  library (17 materials are used, three are spare). The infinite page does not
+  load materials. Both pre-baked stacks are whole-window maps, not per-LOD
+  material tiles.
+- The synthetic world is only 15.36 km and 15 m at L0: it proves palette and
+  transition coverage, not a production-sized world. Per-LOD/virtual material
+  streaming stays a follow-up.
 
 ## Documentation
 
@@ -197,6 +236,7 @@ verification host when debugging a visual regression or comparing screenshots.
 | [openspec/](openspec/) | OpenSpec specs, active change proposals and archive |
 | [docs/INFINITE_TERRAIN_CONCEPT.md](docs/INFINITE_TERRAIN_CONCEPT.md) | Per-LOD snapping, padded rings with parent-square trim and morphs, toroidal tile cache, floating origin, decisions and measured results |
 | [docs/DEM_DATASET.md](docs/DEM_DATASET.md) | Jotunheimen source, license, bake config, tile format, validation and regeneration |
+| [docs/BIOME_WORLD.md](docs/BIOME_WORLD.md) | Synthetic world, climate order, palettes, transition bands, map/report encoding and bake commands |
 | [docs/MATERIALS.md](docs/MATERIALS.md) | Poly Haven library, packed formats, material stack, bake rules, measurements and limitations |
 | [docs/TERRAIN_RESEARCH.md](docs/TERRAIN_RESEARCH.md) | Why plain fBM is bland and the composition this repo adopted: multi-noise channels, spline curves, domain warp, ridge spines |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | Repeatable headless QA, acceptance metrics, manual test pass |
@@ -205,14 +245,16 @@ verification host when debugging a visual regression or comparing screenshots.
 
 ```bash
 npm install
-npm run dev             # local dev server; open /infinite.html or /dem.html
+npm run dev             # local dev server; open /infinite.html, /dem.html or /biome.html
 npm run typecheck       # strict TypeScript check, no emit
 npm run build           # typecheck + static site in dist/
 npm run test:infinite   # Node-only tile/LOD/normal math checks
 npm run test:dem        # synthetic + checked-in DEM dataset checks
+npm run test:biome      # synthetic + checked-in biome dataset checks
 npm run test:materials  # packed Poly Haven library checks
 npm run bake:materials  # fetch/pack the Poly Haven library
 npm run bake:dem -- --config tools/dem/jotunheimen.json  # re-bake the DEM
+npm run bake:biome      # re-bake the synthetic biome world
 ```
 
 The application source is TypeScript (`src/**/*.ts`); Vite strips types for
@@ -230,6 +272,7 @@ Live at:
 
 - **https://mode777.github.io/normalmapped-terrain/infinite.html**
 - **https://mode777.github.io/normalmapped-terrain/dem.html**
+- **https://mode777.github.io/normalmapped-terrain/biome.html**
 - **https://mode777.github.io/normalmapped-terrain/materials.html**
 
 ## Repo map
@@ -240,10 +283,13 @@ AGENTS.md            orientation for AI coding agents (repo map + invariants)
 openspec/            OpenSpec specs, active changes and archive
 infinite.html        procedural infinite page
 dem.html             pre-baked Jotunheimen DEM page
+biome.html           pre-baked synthetic biome world page
 materials.html       packed material swatch page
 docs/INFINITE_TERRAIN_CONCEPT.md  clipmap/tile-cache concept + results
 docs/DEM_DATASET.md               Jotunheimen source, bake and validation
+docs/BIOME_WORLD.md               synthetic world, palettes and transition bands
 docs/MATERIALS.md                 material library, stack, bake and measurements
+public/data/biomes/               checked-in synthetic world tiles, stack and biome map
 docs/TERRAIN_RESEARCH.md          terrain-composition research + sources
 docs/VERIFICATION.md              headless QA recipe + acceptance metrics
 public/data/jotunheimen/          checked-in DEM manifest, tiles, coarse grid,
@@ -257,7 +303,9 @@ src/terrain/         shared renderer, tile cache/source contract, clipmap,
                      shaders, origins, normals, materials and UI
 src/materials/       material swatch page
 src/infinite/        procedural source/worker, flight, page orchestration
-src/dem/             pre-baked source and DEM page orchestration
+src/prebaked/        shared pre-baked page boot/render loop
+src/dem/             pre-baked source and DEM entry point
+src/biome/           biome legend and entry point
 tools/               bake/validation tools + headless QA drivers
 ```
 

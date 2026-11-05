@@ -13,9 +13,24 @@
 import * as THREE from 'three';
 import type { MaterialLibrary } from './materials.ts';
 
+export interface MaterialStackPalette {
+  id: string;
+  slots: [string, string, string, string];
+}
+
+export interface MaterialStackTransition {
+  from: string;
+  to: string;
+  slots: [string, string, string, string];
+  width: number;
+}
+
 export interface MaterialStackManifest {
   library: string;
+  /** Legacy/default palette; per-texel IDs are authoritative when palettes exist. */
   slots: [string, string, string, string];
+  palettes?: MaterialStackPalette[];
+  transitions?: MaterialStackTransition[];
   stack: {
     ids: string;
     weights: string;
@@ -83,6 +98,33 @@ function validateBlock(block: MaterialStackManifest, library: MaterialLibrary): 
   if (block.slots.length !== 4) throw new Error('material stack must have four slots');
   if (new Set(block.slots).size !== 4) throw new Error('material stack slots are not unique');
   for (const id of block.slots) library.indexOf(id);
+  for (const palette of block.palettes ?? []) {
+    if (!palette.id) throw new Error('material palette is missing an id');
+    if (palette.slots.length !== 4) {
+      throw new Error(`material palette ${palette.id} must have four slots`);
+    }
+    if (new Set(palette.slots).size !== 4) {
+      throw new Error(`material palette ${palette.id} slots are not unique`);
+    }
+    for (const id of palette.slots) library.indexOf(id);
+  }
+  for (const transition of block.transitions ?? []) {
+    if (!transition.from || !transition.to) {
+      throw new Error('material transition is missing a region id');
+    }
+    if (transition.slots.length !== 4) {
+      throw new Error(
+        `material transition ${transition.from}->${transition.to} must have four slots`,
+      );
+    }
+    if (new Set(transition.slots).size !== 4) {
+      throw new Error(`material transition ${transition.from}->${transition.to} slots are not unique`);
+    }
+    if (!(transition.width > 0)) {
+      throw new Error(`material transition ${transition.from}->${transition.to} has invalid width`);
+    }
+    for (const id of transition.slots) library.indexOf(id);
+  }
 }
 
 export async function loadMaterialStack(

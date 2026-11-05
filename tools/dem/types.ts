@@ -14,16 +14,70 @@ export interface LocalGeoTiffSourceConfig {
   crs?: string;
 }
 
-export type DemSourceConfig = WcsSourceConfig | LocalGeoTiffSourceConfig;
+export interface SyntheticSourceConfig {
+  type: 'synthetic';
+  /** Repository-relative generator module or label. */
+  generator: string;
+  seed: number;
+  version: number;
+}
+
+export type DemSourceConfig = WcsSourceConfig | LocalGeoTiffSourceConfig | SyntheticSourceConfig;
 
 export interface DemMaterialConfig {
   /** Packed material library manifest, relative to the repo root. */
   library: string;
   /** Four material IDs for the fixed stack palette. */
   slots: [string, string, string, string];
+  /** Authored region palettes for a multi-biome stack. */
+  palettes?: MaterialPalette[];
+  /** Authored transition palettes between adjacent regions. */
+  transitions?: MaterialTransition[];
   stackSize: number;
   macroSize: number;
   seed: number;
+}
+
+export interface MaterialPalette {
+  /** Stable region identifier. */
+  id: string;
+  slots: [string, string, string, string];
+}
+
+export interface MaterialTransition {
+  from: string;
+  to: string;
+  slots: [string, string, string, string];
+  /** Full transition width in metres. */
+  width: number;
+}
+
+export interface BiomeRegionManifest {
+  id: string;
+  label: string;
+  /** Local-frame x/z viewpoint centre for the page and QA. */
+  center: [number, number];
+  /** Debug/legend color in linear 0..1 RGB. */
+  color: [number, number, number];
+}
+
+export interface BiomeTransitionManifest {
+  from: string;
+  to: string;
+  width: number;
+}
+
+export interface BiomeDatasetBlock {
+  map: string;
+  mapSize: number;
+  encoding: 'rgba8-region-transition-progress-climate';
+  report: string;
+  regions: BiomeRegionManifest[];
+  transitions: BiomeTransitionManifest[];
+  hashes: {
+    map: string;
+    report: string;
+  };
 }
 
 export interface DemConfig {
@@ -86,7 +140,10 @@ export interface SeamReport {
 export interface MaterialDatasetBlock {
   /** Runtime-relative path under public/. */
   library: string;
+  /** Legacy/default palette; per-texel IDs are authoritative when palettes exist. */
   slots: [string, string, string, string];
+  palettes?: MaterialPalette[];
+  transitions?: MaterialTransition[];
   stack: {
     ids: string;
     weights: string;
@@ -119,6 +176,9 @@ export interface Manifest {
     bbox: [number, number, number, number];
     resolution: number;
     lastModified?: string;
+    generator?: string;
+    seed?: number;
+    version?: number;
   };
   license: string;
   attribution: string;
@@ -162,4 +222,5 @@ export interface Manifest {
     maxError: number;
   };
   materials?: MaterialDatasetBlock;
+  biomes?: BiomeDatasetBlock;
 }

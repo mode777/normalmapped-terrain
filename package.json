@@ -14,9 +14,11 @@
     "preview": "vite preview",
     "test:infinite": "node tools/test-infinite.ts",
     "bake:detail": "node tools/bake-detail-normal.ts",
+    "bake:biome": "node tools/bake-biome.ts",
     "bake:dem": "node tools/bake-dem.ts",
     "bake:materials": "node tools/fetch-materials.ts",
     "test:dem": "node tools/test-dem.ts",
+    "test:biome": "node tools/test-biome.ts",
     "test:materials": "node tools/test-materials.ts"
   },
   "dependencies": {

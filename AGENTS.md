@@ -28,8 +28,10 @@ npm run build                   # typecheck + production build -> dist/
 
 npm run test:infinite           # Node-only math checks; one script, no per-test filter
 npm run test:dem                # synthetic + checked-in DEM dataset checks
+npm run test:biome              # synthetic + checked-in biome dataset checks
 npm run test:materials          # packed Poly Haven library checks
 npm run bake:materials          # fetch/pack the Poly Haven library
+npm run bake:biome              # re-bake the synthetic biome world and stack
 npm run bake:dem -- --config tools/dem/jotunheimen.json  # re-bake checked-in DEM
 node tools/bake-dem.ts --config tools/dem/jotunheimen.json --materials-only
 node tools/bake-dem.ts --config tools/dem/jotunheimen.json --check-materials
@@ -97,12 +99,17 @@ the binary is at `~/.local/bin/openspec`.
 | `src/materials/main.ts` | Material swatch page logic (albedo + packed slope shading) |
 | `src/materials/materials.css` | Swatch page layout |
 | `src/dem/prebaked-source.ts` | Manifest/tile `TileSource`, coarse `heightAt`, edge clamp |
-| `src/dem/main.ts` | DEM page: manifest-driven config, materials, free-fly/orbit, UI, stats |
+| `src/prebaked/app.ts` | Shared pre-baked page: manifest-driven config, materials, flight, UI, stats, QA hooks |
+| `src/dem/main.ts` | Jotunheimen entry point: dataset path and initial pose |
+| `src/biome/main.ts` | Biome entry point: dataset path, legend and jump controls |
+| `src/biome/biome.css` | Biome legend styling |
 | `src/dem/dem.css` | DEM page additions to `src/styles.css` |
 | `infinite.html` | The procedural PoC entry page |
 | `dem.html` | The pre-baked Jotunheimen DEM entry page |
+| `biome.html` | The pre-baked synthetic biome world entry page |
 | `materials.html` | Packed Poly Haven material swatch page |
 | `public/data/jotunheimen/` | Checked-in manifest, height/normal tiles, coarse grid, stack/macro, preview |
+| `public/data/biomes/` | Synthetic world tiles, six-palette stack, macro, biome map and report |
 | `public/materials/` | Packed material library: two 512² PNGs per material + manifest |
 | `tools/test-infinite.ts` | Node-only tile/LOD/normal math checks |
 | `tools/fetch-materials.ts` | Poly Haven API fetch/pack tool; writes `public/materials` |
@@ -111,12 +118,19 @@ the binary is at `~/.local/bin/openspec`.
 | `tools/bake-dem.ts` | Offline Kartverket WCS -> checked-in tile/stack baker |
 | `tools/test-dem.ts` | Synthetic + checked-in DEM dataset validation |
 | `tools/dem/` | Bake source, grid/tile/normal helpers, material stack bake, manifest validator |
+| `tools/bake-biome.ts` | Synthetic world -> checked-in tiles/stack/map/report baker |
+| `tools/test-biome.ts` | Synthetic + checked-in biome dataset validation |
+| `tools/biome/` | World/climate generator, multi-palette stack, biome validator, config |
+| `tools/prebaked/io.ts` | Shared tile/PNG/hash writers for both bake tools |
+| `docs/BIOME_WORLD.md` | Synthetic world, palettes, transition bands, map/report and bake commands |
 | `docs/MATERIALS.md` | Material library, stack, bake rules, measurements and limitations |
 | `tools/screenshot-infinite.ts` | Headless QA driver for `infinite.html` |
 | `tools/analyze-infinite.ts` | Pixel/console assertions for the infinite screenshots |
 | `tools/screenshot-dem.ts` | Headless QA driver for `dem.html` (includes material shots/swatches) |
 | `tools/analyze-dem.ts` | Pixel/console assertions for the DEM screenshots |
-| `docs/` | INFINITE_TERRAIN_CONCEPT.md, DEM_DATASET.md, MATERIALS.md, TERRAIN_RESEARCH.md, VERIFICATION.md |
+| `tools/screenshot-biome.ts` | Headless QA driver for `biome.html` (six regions, transitions, materials) |
+| `tools/analyze-biome.ts` | Pixel/console assertions for the biome screenshots |
+| `docs/` | INFINITE_TERRAIN_CONCEPT.md, DEM_DATASET.md, BIOME_WORLD.md, MATERIALS.md, TERRAIN_RESEARCH.md, VERIFICATION.md |
 
 ## Critical invariants — breaking these silently ruins the render
 
@@ -249,6 +263,27 @@ the binary is at `~/.local/bin/openspec`.
     --materials-only`, then `--check-materials` and `npm run test:dem`. Source
     downloads stay in the gitignored `.cache/materials/`; `sharp` is a
     devDependency only.
+25. **The synthetic world is 15.36 km, 15 m L0, 5 LODs, 2× normals.** Its
+    1,024² grid produces 344 tiles and the 2048² stack / 1024² macro + biome
+    map. Do not grow the world or normal resolution without measuring the
+    check-in and the 2048² stack budget; per-LOD/material streaming is a
+    separate change.
+26. **The biome stack has six region palettes and five transition palettes.**
+    IDs vary per texel; never assume the Jotunheimen fixed indices. `rock_face_03`
+    is in every palette and band. A region material not in the adjacent band
+    must reach zero weight before the band edge; the transition band must keep
+    its four IDs while any weight is non-zero. `npm run test:biome` checks the
+    stack PNGs, not just the report.
+27. **The biome stack is baked from the quantized 15 m L0 grid.** Quantize the
+    height field before deriving stack weights so `--materials-only` can
+    reconstruct the same grid from uint16 tiles and reproduce the hashes.
+    Changing this breaks `--check-materials`.
+28. **Biome data and material assets are local.** `public/data/biomes/` and
+    `public/materials/` are generated artifacts; regenerate with
+    `npm run bake:biome` and `node tools/bake-biome.ts --config
+    tools/biome/config.json --materials-only`, then `--check-materials`,
+    `npm run test:biome` and `npm run test:materials`. The runtime never calls
+    Poly Haven. Source downloads stay in `.cache/materials/`.
 
 ## Conventions & practices
 
@@ -274,8 +309,9 @@ the binary is at `~/.local/bin/openspec`.
   typecheck` (or `npm run build`) is the type gate.
 - Perf-relevant constants (noise-evaluation count per height sample in
   `terrain-compose.ts` — ~36, the infinite-page `S0`/`LEVELS`/`normalScale`,
-  and the DEM dataset's 10 m / 6 LOD / 2× normal configuration) were chosen to
-  keep tile streaming hitch-free. Adding channels costs every tile bake;
+  the DEM dataset's 10 m / 6 LOD / 2× normal configuration, and the biome
+  dataset's 15 m / 5 LOD / 2× normal / 15.36 km frame) were chosen to keep
+  tile streaming hitch-free. Adding channels costs every tile bake;
   profile before loosening them. The checked-in DEM dataset is ~107.5 MB; the
   2× normal PNGs dominate. The packed Poly Haven library is a separate
   ~33.5 MB; the material shader is heavy on SwiftShader (~1 fps) and needs a
@@ -289,11 +325,13 @@ the binary is at `~/.local/bin/openspec`.
   ~160 MiB, the DEM one is much smaller (640² per layer, 5×5 slots).
 - The height function must stay a pure function of `(x, z)`; global passes
   (e.g. erosion simulation) would make streamed tiles disagree at their seams.
-- The checked-in DEM tiles and material stack are generated artifacts; change
-  them by re-running `npm run bake:dem -- --config tools/dem/jotunheimen.json`,
-  or `--materials-only` for a stack-only refresh, not by hand. `npm run
-  test:dem` is the dataset gate; `npm run test:materials` is the packed-library
-  gate. Source GeoTIFFs and Poly Haven source downloads stay out of git.
+- The checked-in DEM and biome tiles/material stacks are generated artifacts;
+  change them by re-running `npm run bake:dem -- --config
+  tools/dem/jotunheimen.json` or `npm run bake:biome`, or `--materials-only` for
+  a stack-only refresh, not by hand. `npm run test:dem` and `npm run
+  test:biome` are the dataset gates; `npm run test:materials` is the
+  packed-library gate. Source GeoTIFFs and Poly Haven source downloads stay out
+  of git.
 - Commits: concise imperative subject lines, e.g. `Fix Sobel z-gradient sign`.
 - Deploy = push to `main`. **Push after every successful apply**; the push
   itself runs the deploy workflow (unit/dataset checks, build, Pages publish),
@@ -303,8 +341,8 @@ the binary is at `~/.local/bin/openspec`.
   `vite.config.ts` sets `base: './'` for project-page paths — don't remove
   that.
 - Default CI runs `npm run test:infinite`, `npm run test:dem`,
-  `npm run test:materials` and `npm run build`; the build script includes
-  `tsc --noEmit`. The headless screenshot loops are manual visual-debugging
+  `npm run test:biome`, `npm run test:materials` and `npm run build`; the build
+  script includes `tsc --noEmit`. The headless screenshot loops are manual visual-debugging
   tools; set `--chrome` or `CHROME_SHELL_PATH` (the built-in default is from
   the original dev box) and use the SSH verification host in
   `docs/VERIFICATION.md` when screenshots need to be compared.

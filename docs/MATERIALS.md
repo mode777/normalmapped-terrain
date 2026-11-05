@@ -160,32 +160,56 @@ into a temporary directory and compares hashes. `npm run test:dem` validates
 the checked-in files (IDs, weight sums, ranges, dimensions and hashes) without
 network access.
 
+## Biome palettes
+
+The synthetic biome world (`biome.html`, `public/data/biomes/`) reuses the same
+20-material library and 24-layer texture arrays. Its stack is still four IDs +
+four weights per texel, but the IDs now vary by region:
+
+- six authored region palettes (arctic, tundra, boreal, temperate, arid,
+  tropical), each four materials;
+- five fixed four-material transition palettes, one per adjacent pair;
+- `rock_face_03` in every region and band so cliffs stay rock everywhere.
+
+The bake fades a region material that is not in the adjacent band to zero before
+the band edge, then switches to the fixed band IDs and blends the two regions'
+restricted weights. `npm run test:biome` checks every stack ID quartet against
+the authored sets, re-samples the transition edges and verifies the stack,
+macro, biome map and report hashes. See
+[BIOME_WORLD.md](BIOME_WORLD.md) for the tables and algorithm.
+
+The biome dataset is ~18.5 MB including height/normal tiles, a 2048² stack, a
+1024² macro and a 1024² biome map. The runtime texture budget is the same order
+as Jotunheimen (~90 MiB including the 20-layer arrays) because the stack/macro
+dimensions did not change.
+
 ## Measured results and limitations
 
-**Note:** the numbers below were captured before the per-material scale and
-the rocky/aerial-grass rebalance. Re-run the headless QA after visual sign-off;
-the current stack has not been re-measured.
-
-From the Nov 2026 headless pass (SwiftShader, 1600×900):
+From the Nov 2026 headless pass after the per-material scale and
+rocky/aerial-grass rebalance (SwiftShader, 1600×900):
 
 - Material library: 20 layers, 512², two arrays; ~90.7 MiB of GPU texture
   including the 2048² stack and 1024² macro.
 - Shader texture units: 8 of the device's 32; 4 draw calls; ~102k triangles at
   the default DEM pose.
-- Material on/off: `hf 1.08 → 8.13`, mean `155 → 99.3`; the layer contributes
-  both texture detail and color.
-- Material cliff: `std=20.9`; distance: `std=20.1`; debug weight view:
-  `std=13.1`; all 20 swatches load.
+- Jotunheimen material on/off: `hf 1.21 → 3.37`, mean `154.6 → 56.8`; the layer
+  contributes both texture detail and color. Cliff `std=15.6`; distance
+  `std=20.6`; per-material debug `std=17.1`; all 20 swatches load.
+- Biome page material on/off: `hf 1.41 → 13.12`, mean `95.5 → 68.4`; distance
+  `std=41.0`; debug `std=20.1`; 81 analyzer checks pass with no errors.
+- The biome dataset is ~18.5 MB, 344 tiles, with a 2048² stack, 1024² macro and
+  1024² biome map.
 - SwiftShader runs the material shader at roughly **1 fps**. That is a
   software-rasterizer measurement, not a real-GPU frame time.
 
 Limitations:
 
-- Jotunheimen uses a fixed four-material palette; the 20-material library is
-  loaded but the other 16 are for the synthetic world. Multi-palette
-  transition-band baking is the next change.
-- The stack is a whole-window 2048² map (~15 m/texel); per-LOD stack tiles are
-  deferred until the world grows past ~50 km.
+- Jotunheimen uses a fixed four-material palette; the synthetic biome page uses
+  six palettes and five transition bands from the same library (17 of the 20
+  materials are used). The infinite page still has no material adapter.
+- The stacks are whole-window 2048² maps (Jotunheimen ~15 m/texel, biome
+  ~7.5 m/texel); per-LOD stack tiles are deferred until the world grows past
+  ~50 km.
 - Only Rock Face 03 is triplanar. Rocky Terrain 02, snow and the Aerial Grass
   Rock mix stay planar; their stretch is acceptable at the current art scale.
 - The macro albedo is a baked palette average, not an aerial-texture layer.
@@ -197,8 +221,8 @@ Limitations:
 
 ## Follow-ups
 
-1. `add-synthetic-biome-world` — multi-biome palettes, transition bands and the
-   macro/aerial layer.
+1. `add-synthetic-biome-world` — implemented: six palettes, five transition
+   bands, macro/aerial layer and the `biome.html` traversal page.
 2. `add-infinite-material-adapter` — the infinite page generates the same stack.
 3. `add-material-streaming` — per-LOD tiles or virtual texturing for larger
    worlds/libraries.

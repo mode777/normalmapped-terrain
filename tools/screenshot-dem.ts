@@ -255,7 +255,13 @@ await setMaterialNormalStrength(0);
 await shot('22-material-normal0');
 await setMaterialNormalStrength(1);
 
-// Asset-level swatch page.
+// Asset-level swatch page. Drain the tile queue first so navigation does not
+// abort an in-flight tile request and pollute the capture log.
+await page.waitForFunction(() => {
+  const stats = window.__dem.streamer.getStats();
+  return stats.queued + stats.inFlight === 0;
+}, { timeout: 120000 });
+await sleep(800);
 const swatchUrl = new URL('materials.html', TARGET).toString();
 console.log(`goto ${swatchUrl}`);
 await page.goto(swatchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });

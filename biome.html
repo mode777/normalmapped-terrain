@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Synthetic Biomes — Material World</title>
+  <meta name="description" content="A compact synthetic world with climate-driven biome palettes, rendered through the same clipmap, tile cache and material shader as the Jotunheimen DEM." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏔️</text></svg>" />
+  <link rel="stylesheet" href="./src/styles.css" />
+  <link rel="stylesheet" href="./src/dem/dem.css" />
+  <link rel="stylesheet" href="./src/biome/biome.css" />
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="loading" class="overlay">
+    <div class="loading-card">
+      <h1>Synthetic Biomes</h1>
+      <p class="sub">pre-baked biomes · climate palettes · clipmap rings</p>
+      <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+      <p id="loading-status">Loading dataset…</p>
+    </div>
+  </div>
+
+  <header id="title-card" class="glass hidden">
+    <h1>Synthetic Biomes</h1>
+    <p class="pipeline">
+      climate fields <span class="arrow">→</span> 6 palettes <span class="arrow">→</span> 5 transition bands
+    </p>
+    <p class="tagline">15.36 km of synthetic terrain. Six biome palettes, five stable transition bands, the same 20-material library.</p>
+    <a class="dataset-link" href="./dem.html">← Jotunheimen DEM</a> · <a class="dataset-link" href="./infinite.html">procedural infinite terrain</a>
+  </header>
+
+  <div id="stats" class="glass chip hidden">
+    <span><b id="stat-fps">–</b> fps</span>
+    <span class="dot"></span>
+    <span><b id="stat-tris">–</b> tris</span>
+    <span class="dot"></span>
+    <span><b id="stat-calls">–</b> calls</span>
+    <span class="dot"></span>
+    <span><b id="stat-alt">–</b> alt</span>
+    <span class="dot"></span>
+    <span><b id="stat-speed">–</b> m/s</span>
+    <span class="dot"></span>
+    <span><b id="stat-tiles">–</b> tiles</span>
+    <span class="dot"></span>
+    <span><b id="stat-queue">0</b> queued</span>
+    <span class="dot"></span>
+    <span><b id="stat-pos">–</b></span>
+  </div>
+
+  <div id="flight-hint" class="glass chip hidden">
+    <b>Click</b> to capture mouse · <b>WASD</b> fly · <b>Q/E</b> down/up · <b>Shift</b> boost · wheel speed
+  </div>
+  <div id="pointer-hint" class="glass chip hidden">Click the scene to fly</div>
+
+  <aside id="panel" class="glass hidden">
+    <div class="panel-head">
+      <h2>Controls</h2>
+      <button id="panel-toggle" title="collapse">–</button>
+    </div>
+    <div class="panel-body">
+      <section>
+        <h3>Biomes</h3>
+        <div id="biome-legend" class="biome-legend"></div>
+        <p id="biome-current" class="info">region: –</p>
+      </section>
+
+      <section>
+        <h3>Flight</h3>
+        <label class="check-row"><input type="checkbox" id="auto-cruise" checked /> Auto-cruise orbit</label>
+        <label class="slider-row">Speed <input type="range" id="cruise-speed" min="20" max="300" value="60" step="5" /><span id="cruise-speed-val">60 m/s</span></label>
+        <button id="reset-flight" class="wide-btn">Reset position</button>
+        <p id="tile-status" class="info">tiles: warming up</p>
+      </section>
+
+      <section>
+        <h3>Sun</h3>
+        <label class="slider-row">Azimuth <input type="range" id="sun-azimuth" min="0" max="360" value="305" step="1" /><span id="sun-azimuth-val">305°</span></label>
+        <label class="slider-row">Elevation <input type="range" id="sun-elevation" min="6" max="85" value="34" step="1" /><span id="sun-elevation-val">34°</span></label>
+      </section>
+
+      <section>
+        <h3>Terrain</h3>
+        <label class="slider-row">Normal strength <input type="range" id="normal-strength" min="0" max="2.5" value="1" step="0.05" /><span id="normal-strength-val">1.00×</span></label>
+        <label class="slider-row">Detail strength <input type="range" id="detail-strength" min="0" max="1.5" value="0" step="0.05" /><span id="detail-strength-val">0.00×</span></label>
+        <label class="check-row"><input type="checkbox" id="wireframe" /> Wireframe</label>
+        <label class="check-row"><input type="checkbox" id="lod-debug" /> Show LOD levels</label>
+        <label class="check-row"><input type="checkbox" id="tile-debug" /> Show tile grid</label>
+        <p class="info">mesh 15 m · normal map 7.5 m (2×)</p>
+      </section>
+
+      <section>
+        <h3>Materials</h3>
+        <label class="select-row">Mode
+          <select id="material-mode">
+            <option value="on">On</option>
+            <option value="off">Off</option>
+            <option value="debug">Debug</option>
+          </select>
+        </label>
+        <label class="slider-row">Height blend <input type="range" id="height-blend" min="0" max="0.6" value="0.25" step="0.05" /><span id="height-blend-val">0.25×</span></label>
+        <label class="slider-row">Material normals <input type="range" id="material-normal-strength" min="0" max="2" value="1" step="0.05" /><span id="material-normal-strength-val">1.00×</span></label>
+        <label class="slider-row">Texture scale <input type="range" id="material-scale" min="1" max="64" value="32" step="1" /><span id="material-scale-val">32.0×</span></label>
+        <p class="info">20 materials · 6 biome palettes · 5 transition bands · 2048² stack</p>
+      </section>
+
+      <section class="credits">
+        <p>A generated 15.36 × 15.36 km world, ordered arctic → tundra → boreal → temperate → arid → tropical. Heights, normals and the material stack are baked offline into a 5×5-tile toroidal cache per LOD.</p>
+        <p class="attribution">Synthetic world generated by this project (MIT). Material textures: Poly Haven, CC0.</p>
+      </section>
+    </div>
+  </aside>
+
+  <footer id="footnote" class="hidden">
+    <b>Synthetic biomes</b> · MIT · pre-baked height + normal + material tiles · <a href="./dem.html">Jotunheimen DEM</a>
+  </footer>
+
+  <script type="module" src="./src/biome/main.ts"></script>
+</body>
+</html>

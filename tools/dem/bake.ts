@@ -5,7 +5,6 @@
  * one-texel halo of that same grid, which keeps shared boundaries continuous.
  */
 
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,12 +22,17 @@ import {
   bakeCoarseGrid,
   bakeHeightTile,
   bakeNormalTile,
-  encodeUint16,
   referenceNormal,
   sampleBilinear,
   tileRangeForLevel,
   tileWorldForLevel,
 } from './grid.ts';
+import {
+  sha256File,
+  writeHeightTile,
+  writeNormalPng,
+  writeRgbaPng,
+} from '../prebaked/io.ts';
 import { loadSourceGrid } from './kartverket.ts';
 import {
   bakeMaterialStack,
@@ -65,33 +69,6 @@ function ensureCleanOutput(outputDir: string): void {
   ]) {
     rmSync(join(outputDir, name), { recursive: true, force: true });
   }
-}
-
-function writeHeightTile(path: string, heights: Float32Array): void {
-  const buffer = Buffer.allocUnsafe(heights.length * 2);
-  for (let i = 0; i < heights.length; i++) {
-    buffer.writeUInt16LE(encodeUint16(heights[i]), i * 2);
-  }
-  writeFileSync(path, buffer);
-}
-
-function writeNormalPng(path: string, normals: Uint8Array, size: number): void {
-  const png = new PNG({ width: size, height: size });
-  png.data.set(normals);
-  writeFileSync(path, PNG.sync.write(png));
-}
-
-function writeRgbaPng(path: string, data: Uint8Array, size: number): void {
-  if (data.length !== size * size * 4) {
-    throw new Error(`RGBA buffer ${path} has ${data.length} bytes, expected ${size * size * 4}`);
-  }
-  const png = new PNG({ width: size, height: size });
-  png.data.set(data);
-  writeFileSync(path, PNG.sync.write(png));
-}
-
-function sha256File(path: string): string {
-  return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
 export interface MaterialBakeSummary {
@@ -386,14 +363,16 @@ export async function bakeDem(config: DemConfig): Promise<BakeSummary> {
     type: source.sourceType,
     crs: config.source.type === 'kartverket-wcs'
       ? config.source.crs
-      : (config.source.crs ?? 'EPSG:25833'),
+      : config.source.type === 'local-geotiff'
+        ? (config.source.crs ?? 'EPSG:25833')
+        : 'local',
     bbox: [source.bbox.west, source.bbox.south, source.bbox.east, source.bbox.north],
     resolution: config.spacing,
   };
   if (config.source.type === 'kartverket-wcs') {
     manifestSource.url = config.source.url;
     manifestSource.coverage = config.source.coverage;
-  } else {
+  } else if (config.source.type === 'local-geotiff') {
     manifestSource.path = config.source.path;
   }
   if (source.lastModified !== undefined) manifestSource.lastModified = source.lastModified;

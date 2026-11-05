@@ -59,6 +59,7 @@ type TerrainUniforms = {
   uMaterialParamsA: THREE.IUniform<THREE.Vector4[]>;
   uMaterialParamsB: THREE.IUniform<THREE.Vector4[]>;
   uMaterialUvOffset: THREE.IUniform<THREE.Vector2[]>;
+  uMaterialDebugColors: THREE.IUniform<THREE.Vector3[]>;
   uMaterialNormalScale: THREE.IUniform<number>;
   uMaterialScale: THREE.IUniform<number>;
   uMaterialHeightBlend: THREE.IUniform<number>;
@@ -190,6 +191,7 @@ export class ClipmapRenderer {
   private readonly materialParamsA: THREE.Vector4[];
   private readonly materialParamsB: THREE.Vector4[];
   private readonly materialUvOffset: THREE.Vector2[];
+  private readonly materialDebugColors: THREE.Vector3[];
   private materialMode: MaterialMode;
 
   constructor({ renderer, scene, config, palette, detail, materials }: ClipmapRendererOptions) {
@@ -252,6 +254,19 @@ export class ClipmapRenderer {
         : new THREE.Vector4(0, 0, 1, 0);
     });
     this.materialUvOffset = Array.from({ length: 24 }, () => new THREE.Vector2(0, 0));
+    this.materialDebugColors = Array.from({ length: 24 }, (_, i) => {
+      const entry = entries[i];
+      if (!entry) return new THREE.Vector3(0.5, 0.5, 0.5);
+      // Keep the packed average color's lightness, but give each library index
+      // a distinct hue. The raw averages of forest/grass/rock materials are
+      // close enough that a debug view built from them alone reads as one
+      // olive field and cannot show the distribution.
+      const base = new THREE.Color(...entry.averageColor);
+      const luma = 0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b;
+      const hue = (i * 0.618033988749895) % 1;
+      const debug = new THREE.Color().setHSL(hue, 0.68, 0.28 + 0.42 * luma);
+      return new THREE.Vector3(debug.r, debug.g, debug.b);
+    });
 
     this.terrainUniforms = {
       uHeightArray: { value: this.heightTexture },
@@ -288,6 +303,7 @@ export class ClipmapRenderer {
       uMaterialParamsA: { value: this.materialParamsA },
       uMaterialParamsB: { value: this.materialParamsB },
       uMaterialUvOffset: { value: this.materialUvOffset },
+      uMaterialDebugColors: { value: this.materialDebugColors },
       uMaterialNormalScale: { value: materialNormalScale },
       uMaterialScale: { value: materialTextureScale },
       uMaterialHeightBlend: { value: materialHeightBlend },

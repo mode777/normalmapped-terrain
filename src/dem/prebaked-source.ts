@@ -17,9 +17,23 @@ export interface DemManifestRange {
   count: number;
 }
 
+export interface DemMaterialPalette {
+  id: string;
+  slots: [string, string, string, string];
+}
+
+export interface DemMaterialTransition {
+  from: string;
+  to: string;
+  slots: [string, string, string, string];
+  width: number;
+}
+
 export interface DemMaterialBlock {
   library: string;
   slots: [string, string, string, string];
+  palettes?: DemMaterialPalette[];
+  transitions?: DemMaterialTransition[];
   stack: {
     ids: string;
     weights: string;
@@ -39,6 +53,32 @@ export interface DemMaterialBlock {
   };
 }
 
+export interface DemBiomeRegion {
+  id: string;
+  label: string;
+  center: [number, number];
+  color: [number, number, number];
+}
+
+export interface DemBiomeTransition {
+  from: string;
+  to: string;
+  width: number;
+}
+
+export interface DemBiomeBlock {
+  map: string;
+  mapSize: number;
+  encoding: 'rgba8-region-transition-progress-climate';
+  report: string;
+  regions: DemBiomeRegion[];
+  transitions: DemBiomeTransition[];
+  hashes: {
+    map: string;
+    report: string;
+  };
+}
+
 export interface DemManifest {
   version: number;
   dataset: string;
@@ -52,6 +92,9 @@ export interface DemManifest {
     bbox: [number, number, number, number];
     resolution: number;
     lastModified?: string;
+    generator?: string;
+    seed?: number;
+    version?: number;
   };
   license: string;
   attribution: string;
@@ -91,6 +134,7 @@ export interface DemManifest {
   tileCount: number;
   seamReport: { file: string; threshold: number; maxError: number };
   materials?: DemMaterialBlock;
+  biomes?: DemBiomeBlock;
 }
 
 const clamp = (v: number, a: number, b: number): number => Math.max(a, Math.min(b, v));
@@ -119,6 +163,47 @@ export async function loadDemManifest(url: string): Promise<DemManifest> {
     }
     if (m.stack.size <= 0 || m.stack.extent <= 0 || m.macroSize <= 0) {
       throw new Error('DEM material stack/macro dimensions must be positive');
+    }
+    for (const palette of m.palettes ?? []) {
+      if (!palette.id || palette.slots.length !== 4) {
+        throw new Error(`DEM material palette ${palette.id ?? '(missing id)'} must have four IDs`);
+      }
+    }
+    for (const transition of m.transitions ?? []) {
+      if (!transition.from || !transition.to || transition.slots.length !== 4) {
+        throw new Error(
+          `DEM material transition ${transition.from ?? '?'}->${transition.to ?? '?'} `
+          + 'must have two regions and four IDs',
+        );
+      }
+      if (!(transition.width > 0)) {
+        throw new Error(
+          `DEM material transition ${transition.from}->${transition.to} has invalid width`,
+        );
+      }
+    }
+  }
+  if (manifest.biomes) {
+    const b = manifest.biomes;
+    if (!b.map || !b.report) throw new Error('DEM biome block is missing map/report paths');
+    if (!(b.mapSize > 0)) throw new Error('DEM biome map size must be positive');
+    if (b.encoding !== 'rgba8-region-transition-progress-climate') {
+      throw new Error(`unsupported biome map encoding ${b.encoding}`);
+    }
+    if (!Array.isArray(b.regions) || b.regions.length === 0) {
+      throw new Error('DEM biome block has no regions');
+    }
+    for (const region of b.regions) {
+      if (!region.id || !region.label || region.center.length !== 2 || region.color.length !== 3) {
+        throw new Error(`DEM biome region ${region.id ?? '(missing id)'} is invalid`);
+      }
+    }
+    for (const transition of b.transitions) {
+      if (!transition.from || !transition.to || !(transition.width > 0)) {
+        throw new Error(
+          `DEM biome transition ${transition.from ?? '?'}->${transition.to ?? '?'} is invalid`,
+        );
+      }
     }
   }
   return manifest;

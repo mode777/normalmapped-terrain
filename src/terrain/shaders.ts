@@ -163,6 +163,7 @@ export const terrainFragmentShader: string = /* glsl */ `
   uniform vec4 uMaterialParamsA[24];
   uniform vec4 uMaterialParamsB[24];
   uniform vec2 uMaterialUvOffset[24];
+  uniform vec3 uMaterialDebugColors[24];
   uniform float uMaterialNormalScale;
   uniform float uMaterialScale;
   uniform float uMaterialHeightBlend;
@@ -306,13 +307,16 @@ export const terrainFragmentShader: string = /* glsl */ `
       stackWeights = texture(uMaterialStackWeights, stackUv);
 
       if (uMaterialMode > 1.5) {
-        // Weight debug view: rocky tan, cliff dark, snow white, grass green.
-        // Blending the weights shows the distribution even where one material
-        // dominates, unlike a single dominant-ID color.
-        vec3 weightColor = stackWeights.x * vec3(0.58, 0.55, 0.45)
-          + stackWeights.y * vec3(0.30, 0.29, 0.27)
-          + stackWeights.z * vec3(0.95, 0.97, 1.0)
-          + stackWeights.w * vec3(0.25, 0.52, 0.18);
+        // Per-material debug color: each library entry carries its average
+        // albedo, so six biome palettes remain distinguishable without a
+        // hardcoded four-role color table.
+        vec3 weightColor = vec3(0.0);
+        for (int s = 0; s < 4; s++) {
+          float w = slotWeight(stackWeights, s);
+          if (w <= 0.002) continue;
+          int id = int(clamp(slotId(stackIds, s) * 255.0 + 0.5, 0.0, 23.0));
+          weightColor += w * uMaterialDebugColors[id];
+        }
         gl_FragColor = vec4(weightColor, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

@@ -8,7 +8,8 @@ whether the scene actually renders.
 ## Default CI vs visual debugging
 
 On every push to `main`, `.github/workflows/deploy.yml` runs
-`npm run test:infinite`, `npm run test:dem` and `npm run build`, then deploys
+`npm run test:infinite`, `npm run test:dem`, `npm run test:biome`,
+`npm run test:materials` and `npm run build`, then deploys
 the built site to GitHub Pages. That is the default test suite: Node-only math
 and dataset checks plus a production build.
 
@@ -114,14 +115,16 @@ writes `material-stats.json` (library/stack/macro sizes, texture units, budget).
 | tile-grid `std > 20` | the checkerboard is visible |
 | `< 0.2 %` magenta in the crack shot | no gaps between clipmap rings |
 
-Reference values from the checked-in 2× dataset (Nov 2026): 3,080 tiles,
-~107.5 MB dataset plus ~34 MB packed material library, 61 resident after
-priming, 150 resident after a warp, 102k triangles, 4 draw calls, zero upload
-errors, normal-map `hf=1.93` vs flat `hf=0.36`, detail `hf=9.19 → 13.39`,
-material `hf=1.08 → 8.13` and mean `155 → 99.3`, cliff `std=20.9`,
-distance `std=20.1`, debug `std=13.1`, zero crack-test magenta. The material
-layer reports 20 layers, 2048² stack, 1024² macro, 30720 m extent, 8 texture
-units of 32, and ~90.7 MiB of GPU texture. The DEM page sets
+Reference values from the checked-in 2× dataset (Nov 2026, after the
+per-material scale/rebalance): 3,080 tiles, ~107.5 MB dataset plus ~34 MB
+packed material library, 55 resident after priming, 131 resident after a warp,
+102k triangles, 4 draw calls, zero upload errors, normal-map `hf=5.01` vs flat
+`hf=0.36`, detail `hf=2.89 → 7.49`, material `hf=1.21 → 3.37` and mean
+`154.6 → 56.8`, cliff `std=15.6`, distance `std=20.6`, debug `std=17.1`, zero
+crack-test magenta. The material layer reports 20 layers, 2048² stack, 1024²
+macro, 30720 m extent, 8 texture units of 32, and ~90.7 MiB of GPU texture.
+The debug view now uses per-material hue colors derived from the packed average
+lightness, not the old fixed four-role palette. The DEM page sets
 `uNormalLodBias = 1`, so each ring samples the next-finer normal layer; the
 procedural page keeps the bias at 0. The 5×5 cache makes the finer layer cover
 the whole coarse ring, and the normal atlas clamps at its outer edge so the
@@ -197,6 +200,67 @@ does not load materials in this change.
 headless pass proves the pipeline, not real-GPU performance. A real-GPU
 frame-time and filter-quality pass is outstanding. See
 [MATERIALS.md](MATERIALS.md) for the packed formats, bake rules and findings.
+
+## Synthetic biome page
+
+Validate the dataset first; the screenshot loop proves the scene and palettes
+render.
+
+```bash
+npm run test:biome                            # synthetic + checked-in dataset checks
+npm run build && npx vite preview &           # serve dist/ on :4173
+npm install --no-save puppeteer-core          # once, next to the repo
+
+node tools/screenshot-biome.ts \
+  --url http://127.0.0.1:4173/biome.html --out shots-biome
+node tools/analyze-biome.ts shots-biome
+```
+
+`test:biome` is network-free. It checks the generator/climate functions, the
+tile/LOD/normal math, the six palette and five transition sets, the stack
+weight sums, the biome map/report counts, all hashes and the transition edge
+continuity. `screenshot-biome.ts` waits for `window.__biome`, then captures the
+default view, one pose per biome, a north→south traversal, five transition
+close-ups, material on/off/distance/debug, normal-zero, LOD/tile debug, the
+magenta crack test, a low-sun transition pair and the swatch page. It writes
+`biome-stats.json` and `console.json`.
+
+The biome shot names are:
+
+| Shot | Purpose |
+|---|---|
+| `01-default` | initial boreal/temperate view |
+| `02-biome-arctic` … `07-biome-tropical` | one capture per manifest region |
+| `08-traversal-north`, `09-traversal-mid`, `10-traversal-south` | same heading across the climate axis |
+| `11`–`15-transition-*` | close view at each adjacent-region boundary |
+| `16-material-on`, `17-material-off` | same-pose material A/B |
+| `18-material-distance` | macro albedo far field |
+| `19-material-debug` | per-material debug colors |
+| `20-material-normal0` | material normal strength zero at the A/B pose |
+| `21-lod-debug`, `22-tile-grid`, `23-cracks` | LOD colors, checkerboard and magenta crack test |
+| `24`/`25-transition-sun-east/west` | low-sun orientation pair |
+| `26-material-swatches` | `materials.html` asset grid |
+
+`analyze-biome.ts` asserts no console/page errors, non-flat terrain and no
+large black holes on every capture, six biome captures spanning a wide mean
+range and at least eight distinct biome pairs, five transition bands that are
+not flat, material on/off detail and color changes, far-field variation,
+per-material debug variation, material-normal relief, LOD/tile variation and
+`< 0.2%` magenta in the crack shot.
+
+Reference values from the Nov 2026 run: 344 tiles, 47 resident after priming,
+125 resident on the wide poses, 86k triangles, 4 draw calls, zero upload
+errors, 81 analyzer passes and zero failures. Material on/off `hf=1.41 → 13.12`
+and mean `95.5 → 68.4`; distance `std=41.0`; debug `std=20.1`; LOD `std=20.4`;
+biome means span 98.2–155.6; all five transition bands `std=17.2–32.7`; zero
+crack-test magenta. `biome-stats.json` reports 20 layers, 2048² stack, 1024²
+macro/map, 15360 m extent, 8 texture units of 32, and ~90.7 MiB of GPU texture.
+`npm run test:biome` reports a maximum transition edge jump of ~0.0013, below
+the 1/255 threshold. The checked-in preview is
+[`docs/screenshots/biome-world.png`](screenshots/biome-world.png).
+
+SwiftShader renders the material shader at roughly 1 fps; this loop is a
+pipeline/visual check, not a real-GPU performance measurement.
 
 ## Where to run the screenshot loop
 
